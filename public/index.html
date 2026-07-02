@@ -209,6 +209,8 @@ let state = {
   clienteQ: "",
   tratCache: {},
   loading: false,
+  pendientes: [],
+  pendienteMsgs: {},
 };
 
 function loadLocalState(){ try{ if(localStorage.getItem("vs_auth")==="1") state.authed=true; }catch(e){} }
@@ -223,8 +225,35 @@ async function loadClientes(){
       ...c,
       tratamientos: (c.tratamientos||[]).sort((a,b)=>a.fecha.localeCompare(b.fecha))
     }));
+    checkPendientes();
   }catch(e){ console.error(e); toast("Error al cargar datos"); }
   state.loading = false; render();
+}
+
+function checkPendientes(){
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  state.pendientes = [];
+  for(const c of state.clientes){
+    if(c.proxima_cita_fecha){
+      const citaDate = new Date(c.proxima_cita_fecha+'T00:00:00');
+      const diasHasta = Math.round((citaDate - hoy)/(1000*60*60*24));
+      const aviso = c.dias_aviso ?? 2;
+      if(diasHasta === aviso || diasHasta === 0){
+        const hora = c.proxima_cita_hora ? ' a las '+c.proxima_cita_hora.slice(0,5) : '';
+        const msg = c.msg_recordatorio || `Hola ${c.nombre.split(' ')[0]}! 💛 Te recordamos tu turno en Salon Visagista el ${formatDate(c.proxima_cita_fecha)}${hora}. ¡Te esperamos!`;
+        state.pendientes.push({tipo:'cita', cliente:c, diasHasta, mensaje:msg});
+      }
+    }
+    if(c.fecha_nacimiento){
+      const [,mesNac,diaNac] = c.fecha_nacimiento.split('-');
+      const mesHoy = String(hoy.getMonth()+1).padStart(2,'0');
+      const diaHoy = String(hoy.getDate()).padStart(2,'0');
+      if(mesNac===mesHoy && diaNac===diaHoy){
+        const msg = c.msg_cumpleanos || `Hola ${c.nombre.split(' ')[0]}! 🎂 ¡Feliz cumpleaños de parte de todo el equipo de Salon Visagista! Que sea un día hermoso. ✨`;
+        state.pendientes.push({tipo:'cumple', cliente:c, mensaje:msg});
+      }
+    }
+  }
 }
 
 async function loadTratamientos(clienteId){
@@ -320,10 +349,13 @@ function renderBottomNav(){
     {key:"clientes", label:"Clientas", icon:"clients"},
     {key:"notificaciones", label:"Notificar", icon:"bell"},
   ];
+  const hasPendientes = (state.pendientes||[]).length > 0;
   return `<div class="bottom-nav">
     ${items.map(n=>`
-      <div class="nav-item ${t===n.key && state.route.screen==='tab'?'active':''}" onclick="navTab('${n.key}')">
-        ${ic(n.icon)}<span>${n.label}</span>
+      <div class="nav-item ${t===n.key && state.route.screen==='tab'?'active':''}" onclick="navTab('${n.key}')" style="position:relative;">
+        ${ic(n.icon)}
+        ${n.key==='notificaciones' && hasPendientes ? `<span style="position:absolute;top:8px;right:calc(50% - 14px);width:8px;height:8px;background:var(--danger);border-radius:50%;"></span>` : ''}
+        <span>${n.label}</span>
       </div>`).join('')}
     <div class="nav-item" onclick="doLogout()">
       ${ic('logout')}<span>Salir</span>
@@ -390,6 +422,7 @@ function renderClienteDetail(id){
         ${c.telefono?`<span>${c.telefono}</span><br>`:''}
         ${c.email?`<span class="detail-gold">${c.email}</span><br>`:''}
         ${c.direccion?`<span>${c.direccion}</span><br>`:''}
+        ${c.fecha_nacimiento?`<span>🎂 ${formatDate(c.fecha_nacimiento)}</span><br>`:''}
         ${c.notas?`<span style="color:var(--gray);font-style:italic;">${c.notas}</span>`:''}
       </div>
     </div>
@@ -397,7 +430,20 @@ function renderClienteDetail(id){
       <div class="stat-box"><div class="stat-num">${loading?'…':(tratas||[]).length}</div><div class="stat-lbl">Visitas</div></div>
       <div class="stat-box"><div class="stat-num">${loading?'…':[...new Set((tratas||[]).map(t=>t.servicio))].length}</div><div class="stat-lbl">Servicios</div></div>
     </div>
-    <div class="section-header" style="padding-top:8px;">
+    ${c.proxima_cita_fecha ? `
+    <div style="margin:0 20px 4px;padding:14px 16px;background:rgba(201,169,110,0.06);border:1px solid rgba(201,169,110,0.3);">
+      <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Próxima Cita</div>
+      <div style="font-family:'Cormorant Garamond',serif;font-size:18px;">${formatDate(c.proxima_cita_fecha)}${c.proxima_cita_hora?' · '+c.proxima_cita_hora.slice(0,5):''}</div>
+      <div style="font-size:10px;color:var(--gray);margin-top:3px;">Recordatorio ${c.dias_aviso??2} día${(c.dias_aviso??2)!==1?'s':''} antes</div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn-outline" style="flex:1;padding:10px;font-size:9px;" onclick="openProximaCitaModal('${c.id}')">Editar</button>
+        <button class="btn-danger" style="flex:1;padding:10px;font-size:9px;" onclick="cancelarProximaCita('${c.id}')">Cancelar cita</button>
+      </div>
+    </div>` : `
+    <div style="margin:0 20px 4px;">
+      <button class="btn-outline" onclick="openProximaCitaModal('${c.id}')">📅 Agendar Próxima Cita</button>
+    </div>`}
+    <div class="section-header" style="padding-top:16px;">
       <span class="section-title" style="font-size:22px;">Historial</span>
     </div>
     ${loading
@@ -413,7 +459,7 @@ function renderClienteDetail(id){
           </div>`).join('')}
     <div style="padding:20px;display:flex;flex-direction:column;gap:10px;">
       <button class="btn-gold" onclick="nav('nuevo-tratamiento',{clienteId:'${c.id}'})">+ Nueva Visita</button>
-      <button class="btn-outline" onclick="openNotifFechaModal('${c.id}')">Recordatorio por WhatsApp</button>
+      <button class="btn-outline" onclick="openNotifFechaModal('${c.id}')">Enviar WhatsApp ahora</button>
       <button class="btn-danger" onclick="eliminarClienta('${c.id}')">Eliminar Clienta</button>
     </div>
   </div>`;
@@ -608,6 +654,7 @@ function openClientaModal(id){
       <div class="form-group"><label class="form-label">Teléfono / WhatsApp</label><input class="form-input" id="cm-tel" type="tel" value="${c?.telefono||''}" placeholder="549..."></div>
       <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="cm-email" type="email" value="${c?.email||''}" placeholder="correo@ejemplo.com"></div>
       <div class="form-group"><label class="form-label">Dirección</label><input class="form-input" id="cm-dir" value="${c?.direccion||''}" placeholder="Calle, número, ciudad"></div>
+      <div class="form-group"><label class="form-label">Fecha de nacimiento</label><input class="form-input" id="cm-nacimiento" type="date" value="${c?.fecha_nacimiento||''}"></div>
       <div class="form-group"><label class="form-label">Notas internas</label><textarea class="form-input" id="cm-notas" rows="3" placeholder="Alergias, preferencias, tipo de cabello…">${c?.notas||''}</textarea></div>
       <div style="display:flex;gap:10px;margin-top:8px;">
         <button class="btn-outline" style="flex:1;" onclick="document.getElementById('clienta-modal').remove()">Cancelar</button>
@@ -625,6 +672,7 @@ async function guardarClienta(id){
     email: document.getElementById("cm-email").value.trim(),
     direccion: document.getElementById("cm-dir").value.trim(),
     notas: document.getElementById("cm-notas").value.trim(),
+    fecha_nacimiento: document.getElementById("cm-nacimiento").value||null,
   };
   try{
     if(id){
@@ -705,15 +753,102 @@ function enviarNotifFecha(clienteId){
   window.open(`https://wa.me/${tel}?text=${encodeURIComponent(texto)}`,"_blank");
 }
 
+/* ── PROXIMA CITA MODAL ── */
+function openProximaCitaModal(clienteId){
+  const c = state.clientes.find(x=>x.id===clienteId);
+  if(!c) return;
+  const overlay = document.createElement("div");
+  overlay.className="modal-overlay"; overlay.id="proxima-cita-modal";
+  overlay.innerHTML=`
+    <div class="modal-sheet">
+      <div class="modal-title">Próxima Cita</div>
+      <div class="form-group">
+        <label class="form-label">Fecha del turno</label>
+        <input class="form-input" type="date" id="pc-fecha" value="${c.proxima_cita_fecha||''}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Horario</label>
+        <input class="form-input" type="time" id="pc-hora" value="${c.proxima_cita_hora?.slice(0,5)||''}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Avisar cuántos días antes</label>
+        <input class="form-input" type="number" id="pc-aviso" min="0" max="30" value="${c.dias_aviso??2}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mensaje recordatorio (opcional)</label>
+        <textarea class="form-input" id="pc-msg" rows="3" placeholder="Dejá vacío para usar el mensaje automático">${c.msg_recordatorio||''}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mensaje de cumpleaños (opcional)</label>
+        <textarea class="form-input" id="pc-cumple" rows="3" placeholder="Dejá vacío para usar el mensaje automático">${c.msg_cumpleanos||''}</textarea>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:8px;">
+        <button class="btn-outline" style="flex:1;" onclick="document.getElementById('proxima-cita-modal').remove()">Cancelar</button>
+        <button class="btn-gold" style="flex:1;" onclick="guardarProximaCita('${clienteId}')">Guardar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+async function guardarProximaCita(clienteId){
+  const data = {
+    proxima_cita_fecha: document.getElementById("pc-fecha").value||null,
+    proxima_cita_hora: document.getElementById("pc-hora").value||null,
+    dias_aviso: parseInt(document.getElementById("pc-aviso").value)||2,
+    msg_recordatorio: document.getElementById("pc-msg").value.trim(),
+    msg_cumpleanos: document.getElementById("pc-cumple").value.trim(),
+  };
+  try{
+    await sbFetch(`clientes?id=eq.${clienteId}`,"PATCH",data);
+    const c = state.clientes.find(x=>x.id===clienteId);
+    if(c) Object.assign(c,data);
+    checkPendientes();
+    document.getElementById("proxima-cita-modal").remove();
+    toast("Cita guardada"); render();
+  }catch(e){ console.error(e); toast("Error al guardar"); }
+}
+async function cancelarProximaCita(clienteId){
+  if(!confirm("¿Cancelar la próxima cita agendada?")) return;
+  try{
+    await sbFetch(`clientes?id=eq.${clienteId}`,"PATCH",{proxima_cita_fecha:null,proxima_cita_hora:null});
+    const c = state.clientes.find(x=>x.id===clienteId);
+    if(c){ c.proxima_cita_fecha=null; c.proxima_cita_hora=null; }
+    checkPendientes(); toast("Cita cancelada"); render();
+  }catch(e){ console.error(e); toast("Error"); }
+}
+function enviarPendiente(i){
+  const p = state.pendientes[i];
+  const msg = document.getElementById(`pmsg-${i}`)?.value?.trim()||p.mensaje;
+  state.pendienteMsgs[p.cliente.id+'_'+p.tipo] = msg;
+  if(!p.cliente.telefono){ toast("La clienta no tiene teléfono"); return; }
+  const tel = p.cliente.telefono.replace(/\D/g,"");
+  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`,"_blank");
+}
+
 /* ── NOTIFICACIONES ── */
 function renderNotificaciones(){
   const conTel = state.clientes.filter(c=>c.telefono);
+  const pendientes = state.pendientes||[];
   return `
   <div class="screen">
     <div class="topbar"><div class="topbar-logo">Salon Visagista</div></div>
     <div class="section-header"><span class="section-title">Notificaciones</span></div>
+    ${pendientes.length>0 ? `
+    <div style="padding:0 20px;">
+      <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--danger);margin-bottom:14px;">● ${pendientes.length} pendiente${pendientes.length!==1?'s':''} para hoy</div>
+      ${pendientes.map((p,i)=>`
+        <div style="margin-bottom:16px;padding:16px;border:1px solid ${p.tipo==='cumple'?'rgba(201,169,110,0.4)':'rgba(192,57,43,0.4)'};background:${p.tipo==='cumple'?'rgba(201,169,110,0.06)':'rgba(192,57,43,0.06)'};">
+          <div style="margin-bottom:10px;">
+            <div style="font-family:'Cormorant Garamond',serif;font-size:18px;">${p.cliente.nombre}</div>
+            <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:${p.tipo==='cumple'?'var(--gold)':'var(--danger)'};margin-top:3px;">${p.tipo==='cumple'?'🎂 Cumpleaños hoy':'📅 '+(p.diasHasta===0?'Turno hoy':'Turno en '+p.diasHasta+' día'+(p.diasHasta!==1?'s':''))}</div>
+          </div>
+          <div class="form-label" style="margin-bottom:6px;">Mensaje</div>
+          <textarea class="form-input" id="pmsg-${i}" rows="4" style="margin-bottom:10px;">${state.pendienteMsgs[p.cliente.id+'_'+p.tipo]||p.mensaje}</textarea>
+          <button class="btn-gold" onclick="enviarPendiente(${i})">Enviar por WhatsApp</button>
+        </div>`).join('')}
+    </div>
+    <div class="divider" style="margin:4px 20px 20px;"></div>` : ''}
     <div style="padding:0 20px 20px;">
-      <p style="font-size:12px;color:var(--gray);letter-spacing:.5px;line-height:1.7;margin-bottom:24px;">Enviá un mensaje personalizado post-tratamiento a tus clientas por WhatsApp.</p>
+      <p style="font-size:12px;color:var(--gray);letter-spacing:.5px;line-height:1.7;margin-bottom:24px;">Enviá un mensaje personalizado a tus clientas por WhatsApp.</p>
       <div class="form-group">
         <label class="form-label">Clienta</label>
         <select class="form-input" id="notif-cliente" onchange="previewNotif()">
