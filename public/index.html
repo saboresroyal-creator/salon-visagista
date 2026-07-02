@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Salon Visagista — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box; margin:0; padding:0;}
+:root{
+  --black:#0a0a0a;
+  --black2:#111111;
+  --black3:#1a1a1a;
+  --gold:#c9a96e;
+  --gold2:#e8c98a;
+  --white:#ffffff;
+  --off-white:#f5f2ee;
+  --gray:#888888;
+  --gray2:#444444;
+  --glass:rgba(255,255,255,0.04);
+  --glass-bd:rgba(201,169,110,0.2);
+  --danger:#c0392b;
+  --success:#2e7d4f;
+}
+body{font-family:'Montserrat',sans-serif; background:var(--black); color:var(--white); min-height:100vh; overflow-x:hidden;}
+h1,h2,h3,.serif{font-family:'Cormorant Garamond',serif;}
+
+/* ── APP SHELL ── */
+#app{max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; position:relative;}
+.screen{flex:1; display:flex; flex-direction:column; overflow-y:auto; padding-bottom:80px;}
+
+/* ── TOPBAR ── */
+.topbar{display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--glass-bd); background:var(--black); position:sticky; top:0; z-index:50;}
+.topbar h2{font-family:'Cormorant Garamond',serif; font-size:18px; font-weight:400; letter-spacing:2px; text-transform:uppercase;}
+.topbar-logo{font-family:'Cormorant Garamond',serif; font-size:20px; font-weight:300; letter-spacing:3px; text-transform:uppercase; color:var(--gold);}
+.back-btn{width:36px; height:36px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--gold);}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav{position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; background:var(--black2); border-top:1px solid var(--glass-bd); display:flex; z-index:100;}
+.nav-item{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px 0; gap:4px; cursor:pointer; color:var(--gray); transition:.2s;}
+.nav-item.active{color:var(--gold);}
+.nav-item span{font-size:9px; letter-spacing:1px; text-transform:uppercase; font-weight:500;}
+.nav-item svg{width:20px; height:20px;}
+
+/* ── LOGIN ── */
+.login-screen{min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 32px; background:radial-gradient(ellipse at 50% 30%, rgba(201,169,110,0.08) 0%, transparent 70%);}
+.login-brand{text-align:center; margin-bottom:48px;}
+.login-brand h1{font-family:'Cormorant Garamond',serif; font-size:38px; font-weight:300; letter-spacing:4px; text-transform:uppercase; color:var(--white); line-height:1.2;}
+.login-brand p{font-size:10px; letter-spacing:4px; text-transform:uppercase; color:var(--gold); margin-top:8px;}
+.login-divider{width:40px; height:1px; background:var(--gold); margin:16px auto;}
+.login-form{width:100%;}
+.login-input{width:100%; background:transparent; border:none; border-bottom:1px solid var(--glass-bd); padding:14px 0; font-size:14px; color:var(--white); font-family:'Montserrat',sans-serif; letter-spacing:1px; outline:none; transition:.3s;}
+.login-input:focus{border-bottom-color:var(--gold);}
+.login-input::placeholder{color:var(--gray); letter-spacing:1px;}
+.login-btn{width:100%; margin-top:32px; padding:16px; background:var(--gold); color:var(--black); font-family:'Montserrat',sans-serif; font-size:11px; font-weight:600; letter-spacing:3px; text-transform:uppercase; border:none; cursor:pointer; transition:.2s;}
+.login-btn:active{background:var(--gold2);}
+
+/* ── CARDS ── */
+.client-card{margin:0 20px 12px; padding:18px 20px; background:var(--glass); border:1px solid var(--glass-bd); border-left:2px solid var(--gold); cursor:pointer; transition:.2s;}
+.client-card:active{background:rgba(201,169,110,0.08);}
+.client-card-name{font-family:'Cormorant Garamond',serif; font-size:20px; font-weight:400; letter-spacing:1px; margin-bottom:4px;}
+.client-card-sub{font-size:11px; color:var(--gray); letter-spacing:.5px;}
+.client-card-badge{font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--gold); margin-top:6px;}
+
+/* ── SECTION HEADER ── */
+.section-header{padding:28px 20px 12px; display:flex; align-items:flex-end; justify-content:space-between;}
+.section-title{font-family:'Cormorant Garamond',serif; font-size:28px; font-weight:300; letter-spacing:2px; text-transform:uppercase;}
+.section-count{font-size:11px; color:var(--gray); letter-spacing:1px;}
+
+/* ── SEARCH ── */
+.search-wrap{margin:0 20px 16px; border-bottom:1px solid var(--glass-bd); display:flex; align-items:center; gap:10px; padding-bottom:2px;}
+.search-input{flex:1; background:transparent; border:none; outline:none; color:var(--white); font-family:'Montserrat',sans-serif; font-size:13px; letter-spacing:.5px; padding:10px 0;}
+.search-input::placeholder{color:var(--gray);}
+
+/* ── FORMS ── */
+.form-section{padding:20px;}
+.form-group{margin-bottom:20px;}
+.form-label{font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--gold); display:block; margin-bottom:8px;}
+.form-input{width:100%; background:transparent; border:none; border-bottom:1px solid var(--glass-bd); padding:10px 0; font-size:14px; color:var(--white); font-family:'Montserrat',sans-serif; outline:none; transition:.3s;}
+.form-input:focus{border-bottom-color:var(--gold);}
+.form-input::placeholder{color:var(--gray);}
+textarea.form-input{resize:none; min-height:80px; border:1px solid var(--glass-bd); padding:10px; margin-top:4px;}
+textarea.form-input:focus{border-color:var(--gold);}
+
+/* ── BUTTONS ── */
+.btn-gold{background:var(--gold); color:var(--black); font-family:'Montserrat',sans-serif; font-size:10px; font-weight:600; letter-spacing:3px; text-transform:uppercase; border:none; padding:15px 24px; cursor:pointer; width:100%; transition:.2s;}
+.btn-gold:active{background:var(--gold2);}
+.btn-outline{background:transparent; color:var(--gold); border:1px solid var(--glass-bd); font-family:'Montserrat',sans-serif; font-size:10px; font-weight:500; letter-spacing:2px; text-transform:uppercase; padding:13px 20px; cursor:pointer; width:100%; transition:.2s;}
+.btn-outline:active{border-color:var(--gold); background:rgba(201,169,110,0.06);}
+.btn-danger{background:transparent; color:var(--danger); border:1px solid rgba(192,57,43,0.3); font-family:'Montserrat',sans-serif; font-size:10px; letter-spacing:2px; text-transform:uppercase; padding:13px 20px; cursor:pointer; width:100%;}
+.icon-btn{width:36px; height:36px; border:1px solid var(--glass-bd); background:var(--glass); display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--gray); transition:.2s;}
+.icon-btn:hover{border-color:var(--gold); color:var(--gold);}
+
+/* ── FAB ── */
+.fab{position:fixed; bottom:90px; right:calc(50% - 240px + 20px); width:52px; height:52px; background:var(--gold); color:var(--black); border:none; font-size:24px; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:200; box-shadow:0 4px 20px rgba(201,169,110,0.4);}
+
+/* ── TRATAMIENTO ROW ── */
+.trat-row{margin:0 20px 10px; padding:16px; background:var(--glass); border:1px solid var(--glass-bd); cursor:pointer;}
+.trat-date{font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--gold); margin-bottom:6px;}
+.trat-service{font-family:'Cormorant Garamond',serif; font-size:18px; font-weight:400; letter-spacing:.5px; margin-bottom:4px;}
+.trat-obs{font-size:12px; color:var(--gray); line-height:1.5; margin-top:4px;}
+
+/* ── PHOTO UPLOAD ── */
+.photo-upload-area{margin:0 0 20px; border:1px dashed var(--glass-bd); padding:24px; text-align:center; cursor:pointer; position:relative; transition:.2s;}
+.photo-upload-area:hover{border-color:var(--gold);}
+.photo-upload-area input{position:absolute; inset:0; opacity:0; cursor:pointer;}
+.photo-upload-label{font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--gray);}
+.photo-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:20px;}
+.photo-thumb{aspect-ratio:1; position:relative; overflow:hidden;}
+.photo-thumb img{width:100%; height:100%; object-fit:cover;}
+.photo-thumb-del{position:absolute; top:4px; right:4px; width:24px; height:24px; background:rgba(0,0,0,0.7); color:#fff; border:none; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center;}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:500; display:flex; align-items:flex-end; justify-content:center;}
+.modal-sheet{width:100%; max-width:480px; background:var(--black2); border-top:1px solid var(--glass-bd); padding:24px 20px; max-height:90vh; overflow-y:auto;}
+.modal-title{font-family:'Cormorant Garamond',serif; font-size:22px; font-weight:300; letter-spacing:2px; text-transform:uppercase; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--glass-bd);}
+
+/* ── TOAST ── */
+.toast{position:fixed; bottom:100px; left:50%; transform:translateX(-50%); background:var(--gold); color:var(--black); padding:12px 24px; font-size:11px; letter-spacing:2px; text-transform:uppercase; font-weight:600; z-index:1000; opacity:0; transition:opacity .3s; pointer-events:none;}
+.toast.show{opacity:1;}
+
+/* ── EMPTY STATE ── */
+.empty-state{padding:60px 20px; text-align:center;}
+.empty-state p{font-family:'Cormorant Garamond',serif; font-size:20px; font-weight:300; color:var(--gray); letter-spacing:1px;}
+.empty-state-sub{font-size:11px; letter-spacing:1px; color:var(--gray2); margin-top:8px;}
+
+/* ── DETAIL HEADER ── */
+.detail-header{padding:24px 20px; border-bottom:1px solid var(--glass-bd);}
+.detail-name{font-family:'Cormorant Garamond',serif; font-size:32px; font-weight:300; letter-spacing:2px; margin-bottom:6px;}
+.detail-info{font-size:12px; color:var(--gray); letter-spacing:.5px; line-height:1.8;}
+.detail-gold{color:var(--gold);}
+
+/* ── TAGS ── */
+.tag{display:inline-block; font-size:9px; letter-spacing:1.5px; text-transform:uppercase; padding:4px 10px; border:1px solid var(--glass-bd); color:var(--gray); margin:2px;}
+.tag.active{border-color:var(--gold); color:var(--gold);}
+
+/* ── DIVIDER ── */
+.divider{height:1px; background:var(--glass-bd); margin:0 20px;}
+.gold-line{width:32px; height:1px; background:var(--gold); margin:12px 0;}
+
+/* ── STAT ROW ── */
+.stat-row{display:flex; gap:1px; margin:0 20px 20px;}
+.stat-box{flex:1; background:var(--glass); border:1px solid var(--glass-bd); padding:16px 12px; text-align:center;}
+.stat-num{font-family:'Cormorant Garamond',serif; font-size:28px; font-weight:300; color:var(--gold);}
+.stat-lbl{font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--gray); margin-top:4px;}
+
+/* ── NOTIFICATION PREVIEW ── */
+.notif-preview{margin:0 20px 16px; padding:16px; background:rgba(201,169,110,0.06); border:1px solid rgba(201,169,110,0.25);}
+.notif-preview-label{font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--gold); margin-bottom:8px;}
+.notif-preview-text{font-size:13px; color:rgba(255,255,255,0.8); line-height:1.6;}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--glass-bd);}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast-el" class="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════
+   SALON VISAGISTA — Admin App
+   ═══════════════════════════════════════ */
+
+const ADMIN_PASS = "visagista2024";
+const WA_NUMBER  = "549XXXXXXXXXX"; // reemplazar con número real
+
+/* ── STATE ── */
+let state = {
+  authed: false,
+  tab: "clientes",
+  clientes: [],
+  servicios: ["Coloración", "Corte", "Tratamiento Kerastase", "Brushing", "Mechas", "Permanente", "Alisado", "Hidratación"],
+  route: {screen:"login"},
+  clienteQ: "",
+};
+
+function loadState(){
+  try{ const s = localStorage.getItem("visagista_state"); if(s) Object.assign(state, JSON.parse(s)); }catch(e){}
+}
+function saveState(){
+  try{ localStorage.setItem("visagista_state", JSON.stringify(state)); }catch(e){}
+}
+
+/* ── ICONS ── */
+function ic(name){
+  const icons = {
+    clients:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="7" r="4"/><path d="M2 21v-1a7 7 0 0 1 7-7h0"/><circle cx="19" cy="17" r="3"/><path d="M16 17h6M19 14v6"/></svg>',
+    history:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>',
+    scissors:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>',
+    bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+    chevron:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="15 18 9 12 15 6"/></svg>',
+    plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+    edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+    trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>',
+    photo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
+    wa:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.139.564 4.147 1.542 5.888L0 24l6.306-1.524A11.955 11.955 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.891 0-3.658-.523-5.168-1.432L3 21.5l.96-3.729A9.964 9.964 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>',
+    search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+    logout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+  };
+  return icons[name]||'';
+}
+
+/* ── TOAST ── */
+function toast(msg){
+  const el = document.getElementById("toast-el");
+  el.textContent = msg; el.classList.add("show");
+  setTimeout(()=>el.classList.remove("show"), 2800);
+}
+
+/* ── RENDER ── */
+function render(){
+  const app = document.getElementById("app");
+  if(!state.authed){ app.innerHTML = renderLogin(); return; }
+  const {tab} = state;
+  let content = "";
+  if(state.route.screen==="cliente-detail") content = renderClienteDetail(state.route.id);
+  else if(state.route.screen==="tratamiento-detail") content = renderTratamientoDetail(state.route.clienteId, state.route.tratId);
+  else if(state.route.screen==="nuevo-tratamiento") content = renderNuevoTratamiento(state.route.clienteId);
+  else if(tab==="clientes") content = renderClientes();
+  else if(tab==="notificaciones") content = renderNotificaciones();
+  else content = renderClientes();
+  app.innerHTML = content + renderBottomNav();
+}
+
+function nav(screen, params={}){ state.route = {screen, ...params}; render(); }
+function navTab(tab){ state.tab = tab; state.route = {screen:"tab"}; render(); }
+
+/* ── LOGIN ── */
+function renderLogin(){
+  return `
+  <div class="login-screen">
+    <div class="login-brand">
+      <h1>Salon<br>Visagista</h1>
+      <div class="login-divider"></div>
+      <p>Panel de Administración</p>
+    </div>
+    <div class="login-form">
+      <input class="login-input" type="password" id="login-pass" placeholder="Contraseña" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()">
+      <button class="login-btn" onclick="doLogin()">Ingresar</button>
+    </div>
+  </div>`;
+}
+function doLogin(){
+  const v = document.getElementById("login-pass").value;
+  if(v === ADMIN_PASS){ state.authed = true; state.tab = "clientes"; state.route={screen:"tab"}; render(); }
+  else toast("Contraseña incorrecta");
+}
+
+/* ── BOTTOM NAV ── */
+function renderBottomNav(){
+  const t = state.tab;
+  const nav_items = [
+    {key:"clientes", label:"Clientas", icon:"clients"},
+    {key:"notificaciones", label:"Notificar", icon:"bell"},
+  ];
+  return `<div class="bottom-nav">
+    ${nav_items.map(n=>`
+      <div class="nav-item ${t===n.key && state.route.screen==='tab'?'active':''}" onclick="navTab('${n.key}')">
+        ${ic(n.icon)}<span>${n.label}</span>
+      </div>`).join('')}
+    <div class="nav-item" onclick="if(confirm('¿Cerrar sesión?')){state.authed=false;render();}">
+      ${ic('logout')}<span>Salir</span>
+    </div>
+  </div>`;
+}
+
+/* ── CLIENTES ── */
+function renderClientes(){
+  const q = (state.clienteQ||'').toLowerCase().trim();
+  const list = q ? state.clientes.filter(c=>c.nombre.toLowerCase().includes(q)||c.telefono?.includes(q)) : state.clientes;
+  return `
+  <div class="screen">
+    <div class="topbar">
+      <div class="topbar-logo">Salon Visagista</div>
+      <button class="icon-btn" onclick="doLogout()" style="border:none; background:none;">${ic('logout')}</button>
+    </div>
+    <div class="section-header">
+      <span class="section-title">Clientas</span>
+      <span class="section-count">${state.clientes.length} registradas</span>
+    </div>
+    <div class="search-wrap" style="margin:0 20px 16px;">
+      ${ic('search')}
+      <input class="search-input" placeholder="Buscar clienta…" value="${state.clienteQ||''}"
+        oninput="state.clienteQ=this.value; document.getElementById('clientes-list').innerHTML=renderClientesList()">
+    </div>
+    <div id="clientes-list">${renderClientesList()}</div>
+    <button class="fab" onclick="openNuevaClientaModal()">${ic('plus')}</button>
+  </div>`;
+}
+function renderClientesList(){
+  const q = (state.clienteQ||'').toLowerCase().trim();
+  const list = q ? state.clientes.filter(c=>c.nombre.toLowerCase().includes(q)||(c.telefono||'').includes(q)) : state.clientes;
+  if(list.length===0) return `<div class="empty-state"><p>Sin clientas aún</p><div class="empty-state-sub">Tocá + para agregar la primera</div></div>`;
+  return list.map(c=>{
+    const tratCount = (c.tratamientos||[]).length;
+    const last = tratCount>0 ? c.tratamientos[tratCount-1] : null;
+    return `
+    <div class="client-card" onclick="nav('cliente-detail',{id:'${c.id}'})">
+      <div class="client-card-name">${c.nombre}</div>
+      <div class="client-card-sub">${c.telefono||''} ${c.email?'· '+c.email:''}</div>
+      ${tratCount>0 ? `<div class="client-card-badge">${tratCount} visita${tratCount!==1?'s':''} · Último: ${last.servicio}</div>` : '<div class="client-card-badge" style="color:var(--gray);">Sin visitas registradas</div>'}
+    </div>`;
+  }).join('');
+}
+function doLogout(){ if(confirm('¿Cerrar sesión?')){ state.authed=false; render(); } }
+
+/* ── DETALLE CLIENTA ── */
+function renderClienteDetail(id){
+  const c = state.clientes.find(x=>x.id===id);
+  if(!c) return renderClientes();
+  const tratas = (c.tratamientos||[]).slice().reverse();
+  return `
+  <div class="screen">
+    <div class="topbar">
+      <button class="back-btn" onclick="navTab('clientes')">${ic('chevron')}</button>
+      <h2 style="font-size:14px; letter-spacing:1px;">${c.nombre.toUpperCase()}</h2>
+      <button class="icon-btn" style="border:none; background:none; color:var(--gold);" onclick="openEditarClientaModal('${c.id}')">${ic('edit')}</button>
+    </div>
+    <div class="detail-header">
+      <div class="detail-name">${c.nombre}</div>
+      <div class="detail-info">
+        ${c.telefono?`<span>${c.telefono}</span><br>`:''}
+        ${c.email?`<span class="detail-gold">${c.email}</span><br>`:''}
+        ${c.direccion?`<span>${c.direccion}</span><br>`:''}
+        ${c.notas?`<span style="color:var(--gray); font-style:italic;">${c.notas}</span>`:''}
+      </div>
+    </div>
+    <div class="stat-row" style="margin-top:20px;">
+      <div class="stat-box"><div class="stat-num">${(c.tratamientos||[]).length}</div><div class="stat-lbl">Visitas</div></div>
+      <div class="stat-box"><div class="stat-num">${[...new Set((c.tratamientos||[]).map(t=>t.servicio))].length}</div><div class="stat-lbl">Servicios</div></div>
+    </div>
+    <div class="section-header" style="padding-top:8px;">
+      <span class="section-title" style="font-size:22px;">Historial</span>
+    </div>
+    ${tratas.length===0 ? `<div class="empty-state"><p>Sin tratamientos</p></div>` : tratas.map(t=>`
+      <div class="trat-row" onclick="nav('tratamiento-detail',{clienteId:'${c.id}',tratId:'${t.id}'})">
+        <div class="trat-date">${formatDate(t.fecha)}</div>
+        <div class="trat-service">${t.servicio}</div>
+        ${t.obs?`<div class="trat-obs">${t.obs}</div>`:''}
+        ${(t.fotos||[]).length>0?`<div style="font-size:10px; color:var(--gold); letter-spacing:1px; margin-top:6px;">${t.fotos.length} foto${t.fotos.length!==1?'s':''}</div>`:''}
+      </div>`).join('')}
+    <div style="padding:20px; display:flex; flex-direction:column; gap:10px;">
+      <button class="btn-gold" onclick="nav('nuevo-tratamiento',{clienteId:'${c.id}'})">+ Nueva Visita</button>
+      <button class="btn-outline" onclick="enviarNotificacion('${c.id}')">Enviar Notificación WhatsApp</button>
+      <button class="btn-danger" onclick="eliminarClienta('${c.id}')">Eliminar Clienta</button>
+    </div>
+  </div>`;
+}
+
+/* ── DETALLE TRATAMIENTO ── */
+function renderTratamientoDetail(clienteId, tratId){
+  const c = state.clientes.find(x=>x.id===clienteId);
+  const t = (c?.tratamientos||[]).find(x=>x.id===tratId);
+  if(!c||!t) return renderClientes();
+  return `
+  <div class="screen">
+    <div class="topbar">
+      <button class="back-btn" onclick="nav('cliente-detail',{id:'${clienteId}'})">${ic('chevron')}</button>
+      <h2 style="font-size:14px; letter-spacing:1px;">Tratamiento</h2>
+      <button class="icon-btn" style="border:none; background:none; color:var(--gold);" onclick="openEditarTratamientoModal('${clienteId}','${tratId}')">${ic('edit')}</button>
+    </div>
+    <div class="detail-header">
+      <div class="trat-date" style="margin-bottom:8px;">${formatDate(t.fecha)}</div>
+      <div class="detail-name" style="font-size:26px;">${t.servicio}</div>
+      ${t.productos?`<div class="detail-info" style="margin-top:8px;">Productos: <span class="detail-gold">${t.productos}</span></div>`:''}
+    </div>
+    ${t.obs?`<div style="padding:20px 20px 0;"><div class="form-label">Observaciones</div><p style="font-size:14px; color:rgba(255,255,255,0.8); line-height:1.7;">${t.obs}</p></div>`:''}
+    ${(t.fotos||[]).length>0?`
+      <div style="padding:20px 20px 0;"><div class="form-label">Fotos</div></div>
+      <div class="photo-grid" style="padding:0 20px;">
+        ${t.fotos.map((f,i)=>`<div class="photo-thumb"><img src="${f}" onclick="openPhotoViewer('${clienteId}','${tratId}',${i})"></div>`).join('')}
+      </div>`:''}
+    <div style="padding:20px; display:flex; flex-direction:column; gap:10px;">
+      <button class="btn-danger" onclick="eliminarTratamiento('${clienteId}','${tratId}')">Eliminar Tratamiento</button>
+    </div>
+  </div>`;
+}
+
+/* ── NUEVO TRATAMIENTO ── */
+let tratDraft = { servicio:"", productos:"", obs:"", fotos:[], fecha:"" };
+function renderNuevoTratamiento(clienteId){
+  const c = state.clientes.find(x=>x.id===clienteId);
+  tratDraft = { servicio:"", productos:"", obs:"", fotos:[], fecha: new Date().toISOString().split('T')[0] };
+  return `
+  <div class="screen">
+    <div class="topbar">
+      <button class="back-btn" onclick="nav('cliente-detail',{id:'${clienteId}'})">${ic('chevron')}</button>
+      <h2 style="font-size:14px; letter-spacing:1px;">Nueva Visita</h2>
+      <div style="width:36px;"></div>
+    </div>
+    <div class="form-section">
+      <div class="form-group">
+        <label class="form-label">Clienta</label>
+        <p style="font-family:'Cormorant Garamond',serif; font-size:20px; color:var(--gold);">${c?.nombre||''}</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha</label>
+        <input class="form-input" type="date" id="trat-fecha" value="${tratDraft.fecha}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Servicio / Tratamiento</label>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;">
+          ${state.servicios.map(s=>`<span class="tag" id="tag-${s.replace(/\s/g,'_')}" onclick="selectServicio('${s}',this)">${s}</span>`).join('')}
+        </div>
+        <input class="form-input" type="text" id="trat-servicio" placeholder="O escribí el servicio…" oninput="tratDraft.servicio=this.value">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Productos utilizados</label>
+        <input class="form-input" type="text" id="trat-productos" placeholder="Ej: Kérastase Chronologiste…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Observaciones</label>
+        <textarea class="form-input" id="trat-obs" placeholder="Notas sobre el estado del cabello, resultado, próximos pasos…" rows="4"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fotos</label>
+        <div class="photo-upload-area">
+          <input type="file" accept="image/*" multiple onchange="onTratFotosSelected(event,'${clienteId}')">
+          <div>${ic('photo')}</div>
+          <div class="photo-upload-label" style="margin-top:8px;">Agregar fotos</div>
+        </div>
+        <div id="trat-fotos-preview"></div>
+      </div>
+      <button class="btn-gold" onclick="guardarTratamiento('${clienteId}')">Guardar Visita</button>
+    </div>
+  </div>`;
+}
+function selectServicio(s, el){
+  tratDraft.servicio = s;
+  document.getElementById("trat-servicio").value = s;
+  document.querySelectorAll('.tag').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+}
+function onTratFotosSelected(event, clienteId){
+  const files = Array.from(event.target.files);
+  files.forEach(file=>{
+    const reader = new FileReader();
+    reader.onload = e=>{ tratDraft.fotos.push(e.target.result); renderTratFotosPreview(); };
+    reader.readAsDataURL(file);
+  });
+}
+function renderTratFotosPreview(){
+  const el = document.getElementById("trat-fotos-preview");
+  if(!el) return;
+  el.innerHTML = `<div class="photo-grid">${tratDraft.fotos.map((f,i)=>`
+    <div class="photo-thumb">
+      <img src="${f}">
+      <button class="photo-thumb-del" onclick="tratDraft.fotos.splice(${i},1);renderTratFotosPreview()">×</button>
+    </div>`).join('')}</div>`;
+}
+function guardarTratamiento(clienteId){
+  const servicio = document.getElementById("trat-servicio")?.value.trim() || tratDraft.servicio;
+  if(!servicio){ toast("Ingresá el servicio"); return; }
+  const c = state.clientes.find(x=>x.id===clienteId);
+  if(!c) return;
+  const t = {
+    id: "t"+Date.now(),
+    fecha: document.getElementById("trat-fecha")?.value || new Date().toISOString().split('T')[0],
+    servicio,
+    productos: document.getElementById("trat-productos")?.value.trim()||"",
+    obs: document.getElementById("trat-obs")?.value.trim()||"",
+    fotos: tratDraft.fotos.slice(),
+  };
+  if(!c.tratamientos) c.tratamientos = [];
+  c.tratamientos.push(t);
+  saveState();
+  toast("Visita guardada");
+  nav("cliente-detail",{id:clienteId});
+}
+
+/* ── EDITAR TRATAMIENTO ── */
+function openEditarTratamientoModal(clienteId, tratId){
+  const c = state.clientes.find(x=>x.id===clienteId);
+  const t = (c?.tratamientos||[]).find(x=>x.id===tratId);
+  if(!t) return;
+  const overlay = document.createElement("div");
+  overlay.className="modal-overlay"; overlay.id="trat-edit-overlay";
+  overlay.innerHTML=`
+    <div class="modal-sheet">
+      <div class="modal-title">Editar Tratamiento</div>
+      <div class="form-group"><label class="form-label">Servicio</label><input class="form-input" id="et-serv" value="${t.servicio}"></div>
+      <div class="form-group"><label class="form-label">Productos</label><input class="form-input" id="et-prod" value="${t.productos||''}"></div>
+      <div class="form-group"><label class="form-label">Observaciones</label><textarea class="form-input" id="et-obs" rows="4">${t.obs||''}</textarea></div>
+      <div style="display:flex;gap:10px;margin-top:8px;">
+        <button class="btn-outline" style="flex:1;" onclick="document.getElementById('trat-edit-overlay').remove()">Cancelar</button>
+        <button class="btn-gold" style="flex:1;" onclick="guardarEditTrat('${clienteId}','${tratId}')">Guardar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function guardarEditTrat(clienteId,tratId){
+  const c=state.clientes.find(x=>x.id===clienteId);
+  const t=(c?.tratamientos||[]).find(x=>x.id===tratId);
+  if(!t) return;
+  t.servicio=document.getElementById("et-serv").value.trim()||t.servicio;
+  t.productos=document.getElementById("et-prod").value.trim();
+  t.obs=document.getElementById("et-obs").value.trim();
+  saveState(); document.getElementById("trat-edit-overlay").remove();
+  toast("Tratamiento actualizado"); nav("tratamiento-detail",{clienteId,tratId});
+}
+function eliminarTratamiento(clienteId,tratId){
+  if(!confirm("¿Eliminar este tratamiento?")) return;
+  const c=state.clientes.find(x=>x.id===clienteId);
+  c.tratamientos=(c.tratamientos||[]).filter(t=>t.id!==tratId);
+  saveState(); toast("Eliminado"); nav("cliente-detail",{id:clienteId});
+}
+
+/* ── MODAL NUEVA/EDITAR CLIENTA ── */
+function openNuevaClientaModal(){ openClientaModal(null); }
+function openEditarClientaModal(id){ openClientaModal(id); }
+function openClientaModal(id){
+  const c = id ? state.clientes.find(x=>x.id===id) : null;
+  const overlay = document.createElement("div");
+  overlay.className="modal-overlay"; overlay.id="clienta-modal";
+  overlay.innerHTML=`
+    <div class="modal-sheet">
+      <div class="modal-title">${c?'Editar Clienta':'Nueva Clienta'}</div>
+      <div class="form-group"><label class="form-label">Nombre completo *</label><input class="form-input" id="cm-nombre" value="${c?.nombre||''}" placeholder="Nombre y apellido"></div>
+      <div class="form-group"><label class="form-label">Teléfono / WhatsApp</label><input class="form-input" id="cm-tel" type="tel" value="${c?.telefono||''}" placeholder="549..."></div>
+      <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="cm-email" type="email" value="${c?.email||''}" placeholder="correo@ejemplo.com"></div>
+      <div class="form-group"><label class="form-label">Dirección</label><input class="form-input" id="cm-dir" value="${c?.direccion||''}" placeholder="Calle, número, ciudad"></div>
+      <div class="form-group"><label class="form-label">Notas internas</label><textarea class="form-input" id="cm-notas" rows="3" placeholder="Alergias, preferencias, tipo de cabello…">${c?.notas||''}</textarea></div>
+      <div style="display:flex;gap:10px;margin-top:8px;">
+        <button class="btn-outline" style="flex:1;" onclick="document.getElementById('clienta-modal').remove()">Cancelar</button>
+        <button class="btn-gold" style="flex:1;" onclick="guardarClienta('${id||''}')">Guardar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function guardarClienta(id){
+  const nombre=document.getElementById("cm-nombre").value.trim();
+  if(!nombre){ toast("El nombre es obligatorio"); return; }
+  const data={
+    nombre,
+    telefono:document.getElementById("cm-tel").value.trim(),
+    email:document.getElementById("cm-email").value.trim(),
+    direccion:document.getElementById("cm-dir").value.trim(),
+    notas:document.getElementById("cm-notas").value.trim(),
+  };
+  if(id){ const c=state.clientes.find(x=>x.id===id); Object.assign(c,data); }
+  else{ state.clientes.push({id:"c"+Date.now(), tratamientos:[], ...data}); }
+  saveState(); document.getElementById("clienta-modal").remove();
+  toast("Clienta guardada"); render();
+}
+function eliminarClienta(id){
+  if(!confirm("¿Eliminar esta clienta y todo su historial?")) return;
+  state.clientes=state.clientes.filter(c=>c.id!==id);
+  saveState(); toast("Clienta eliminada"); navTab("clientes");
+}
+
+/* ── NOTIFICACIONES ── */
+function renderNotificaciones(){
+  const conTel = state.clientes.filter(c=>c.telefono);
+  return `
+  <div class="screen">
+    <div class="topbar">
+      <div class="topbar-logo">Salon Visagista</div>
+    </div>
+    <div class="section-header">
+      <span class="section-title">Notificaciones</span>
+    </div>
+    <div style="padding:0 20px 20px;">
+      <p style="font-size:12px; color:var(--gray); letter-spacing:.5px; line-height:1.7; margin-bottom:24px;">Enviá un mensaje personalizado post-tratamiento a tus clientas por WhatsApp.</p>
+      <div class="form-group">
+        <label class="form-label">Clienta</label>
+        <select class="form-input" id="notif-cliente" onchange="previewNotif()">
+          <option value="">— Seleccionar —</option>
+          ${conTel.map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mensaje</label>
+        <textarea class="form-input" id="notif-msg" rows="5" placeholder="Escribí el mensaje post-tratamiento…" oninput="previewNotif()">Hola {nombre}, fue un placer atenderte hoy en Salon Visagista. ✨ Tu tratamiento quedó impecable. ¡Te esperamos pronto!</textarea>
+      </div>
+      <div id="notif-preview"></div>
+      <button class="btn-gold" onclick="enviarNotifCustom()">Enviar por WhatsApp</button>
+    </div>
+  </div>`;
+}
+function previewNotif(){
+  const clienteId=document.getElementById("notif-cliente")?.value;
+  const msg=document.getElementById("notif-msg")?.value||"";
+  const c=state.clientes.find(x=>x.id===clienteId);
+  const texto=msg.replace("{nombre}", c?.nombre?.split(" ")[0]||"clienta");
+  const el=document.getElementById("notif-preview");
+  if(el) el.innerHTML=`<div class="notif-preview"><div class="notif-preview-label">Vista previa</div><div class="notif-preview-text">${texto}</div></div>`;
+}
+function enviarNotificacion(clienteId){
+  const c=state.clientes.find(x=>x.id===clienteId);
+  if(!c?.telefono){ toast("La clienta no tiene teléfono registrado"); return; }
+  const tratas=c.tratamientos||[];
+  const last=tratas[tratas.length-1];
+  const msg=`Hola ${c.nombre.split(" ")[0]}, fue un placer atenderte hoy en Salon Visagista. ✨${last?` Tu ${last.servicio.toLowerCase()} quedó impecable.`:''} ¡Te esperamos pronto!`;
+  const tel=c.telefono.replace(/\D/g,"");
+  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`,"_blank");
+}
+function enviarNotifCustom(){
+  const clienteId=document.getElementById("notif-cliente")?.value;
+  const msg=document.getElementById("notif-msg")?.value?.trim()||"";
+  const c=state.clientes.find(x=>x.id===clienteId);
+  if(!c){ toast("Seleccioná una clienta"); return; }
+  if(!c.telefono){ toast("La clienta no tiene teléfono"); return; }
+  if(!msg){ toast("Escribí el mensaje"); return; }
+  const texto=msg.replace("{nombre}",c.nombre.split(" ")[0]);
+  const tel=c.telefono.replace(/\D/g,"");
+  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(texto)}`,"_blank");
+}
+
+/* ── VIEWER FOTO ── */
+function openPhotoViewer(clienteId,tratId,idx){
+  const c=state.clientes.find(x=>x.id===clienteId);
+  const t=(c?.tratamientos||[]).find(x=>x.id===tratId);
+  if(!t?.fotos) return;
+  const overlay=document.createElement("div");
+  overlay.style.cssText="position:fixed;inset:0;background:#000;z-index:999;display:flex;align-items:center;justify-content:center;";
+  overlay.onclick=()=>overlay.remove();
+  overlay.innerHTML=`<img src="${t.fotos[idx]}" style="max-width:100%;max-height:100%;object-fit:contain;">`;
+  document.body.appendChild(overlay);
+}
+
+/* ── UTILS ── */
+function formatDate(d){
+  if(!d) return "";
+  const [y,m,day]=d.split("-");
+  const months=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  return `${day} ${months[parseInt(m)-1]} ${y}`;
+}
+
+/* ── INIT ── */
+loadState();
+render();
+</script>
+</body>
+</html>
