@@ -33,7 +33,7 @@ h1,h2,h3,.serif{font-family:'Cormorant Garamond',serif;}
 
 /* ── APP SHELL ── */
 #app{max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; position:relative;}
-.screen{flex:1; display:flex; flex-direction:column; overflow-y:auto; padding-bottom:80px;}
+.screen{flex:1; display:flex; flex-direction:column; overflow-y:auto; padding-bottom:80px; -webkit-overflow-scrolling:touch; transform:translateZ(0);}
 
 /* ── TOPBAR ── */
 .topbar{display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--glass-bd); background:var(--black); position:sticky; top:0; z-index:50;}
@@ -75,6 +75,7 @@ h1,h2,h3,.serif{font-family:'Cormorant Garamond',serif;}
 
 /* ── SEARCH ── */
 .search-wrap{margin:0 20px 16px; border-bottom:1px solid var(--glass-bd); display:flex; align-items:center; gap:10px; padding-bottom:2px;}
+.search-wrap svg{width:18px; height:18px; flex-shrink:0; color:var(--gray);}
 .search-input{flex:1; background:transparent; border:none; outline:none; color:var(--white); font-family:'Montserrat',sans-serif; font-size:13px; letter-spacing:.5px; padding:10px 0;}
 .search-input::placeholder{color:var(--gray);}
 
@@ -412,7 +413,7 @@ function renderClienteDetail(id){
           </div>`).join('')}
     <div style="padding:20px;display:flex;flex-direction:column;gap:10px;">
       <button class="btn-gold" onclick="nav('nuevo-tratamiento',{clienteId:'${c.id}'})">+ Nueva Visita</button>
-      <button class="btn-outline" onclick="enviarNotificacion('${c.id}')">Enviar Notificación WhatsApp</button>
+      <button class="btn-outline" onclick="openNotifFechaModal('${c.id}')">Recordatorio por WhatsApp</button>
       <button class="btn-danger" onclick="eliminarClienta('${c.id}')">Eliminar Clienta</button>
     </div>
   </div>`;
@@ -646,6 +647,62 @@ async function eliminarClienta(id){
     delete state.tratCache[id];
     toast("Clienta eliminada"); navTab("clientes");
   }catch(e){ console.error(e); toast("Error al eliminar"); }
+}
+
+/* ── POPUP NOTIF CON FECHA ── */
+function openNotifFechaModal(clienteId){
+  const c = state.clientes.find(x=>x.id===clienteId);
+  if(!c){ toast("Clienta no encontrada"); return; }
+  if(!c.telefono){ toast("La clienta no tiene teléfono registrado"); return; }
+  const hoy = new Date().toISOString().split('T')[0];
+  const overlay = document.createElement("div");
+  overlay.className="modal-overlay"; overlay.id="notif-fecha-modal";
+  overlay.innerHTML=`
+    <div class="modal-sheet">
+      <div class="modal-title">Recordatorio WhatsApp</div>
+      <div style="margin-bottom:16px;">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:18px;color:var(--gold);">${c.nombre}</div>
+        <div style="font-size:11px;color:var(--gray);margin-top:2px;">${c.telefono}</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha del turno</label>
+        <input class="form-input" type="date" id="nf-fecha" value="${hoy}" oninput="actualizarPreviaNotif()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mensaje</label>
+        <textarea class="form-input" id="nf-msg" rows="5" oninput="actualizarPreviaNotif()">Hola ${c.nombre.split(' ')[0]}! 💛 Te recordamos que tenés turno en Salon Visagista el {fecha}. ¡Te esperamos!</textarea>
+      </div>
+      <div id="nf-preview" style="margin-bottom:16px;padding:14px;background:rgba(201,169,110,0.06);border:1px solid rgba(201,169,110,0.25);">
+        <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Vista previa</div>
+        <div id="nf-preview-text" style="font-size:13px;color:rgba(255,255,255,0.8);line-height:1.6;"></div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-outline" style="flex:1;" onclick="document.getElementById('notif-fecha-modal').remove()">Cancelar</button>
+        <button class="btn-gold" style="flex:1;" onclick="enviarNotifFecha('${clienteId}')">Enviar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  actualizarPreviaNotif();
+}
+function actualizarPreviaNotif(){
+  const fechaVal = document.getElementById("nf-fecha")?.value;
+  const msg = document.getElementById("nf-msg")?.value||"";
+  const el = document.getElementById("nf-preview-text");
+  if(!el) return;
+  let fechaTexto = fechaVal ? formatDate(fechaVal) : "{fecha}";
+  el.textContent = msg.replace("{fecha}", fechaTexto);
+}
+function enviarNotifFecha(clienteId){
+  const c = state.clientes.find(x=>x.id===clienteId);
+  if(!c?.telefono) return;
+  const fechaVal = document.getElementById("nf-fecha")?.value;
+  const msg = document.getElementById("nf-msg")?.value?.trim()||"";
+  if(!msg){ toast("Escribí el mensaje"); return; }
+  const fechaTexto = fechaVal ? formatDate(fechaVal) : "";
+  const texto = msg.replace("{fecha}", fechaTexto);
+  const tel = c.telefono.replace(/\D/g,"");
+  document.getElementById("notif-fecha-modal").remove();
+  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(texto)}`,"_blank");
 }
 
 /* ── NOTIFICACIONES ── */
