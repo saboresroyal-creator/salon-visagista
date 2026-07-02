@@ -35,6 +35,31 @@ h1,h2,h3,.serif{font-family:'Cormorant Garamond',serif;}
 #app{max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; position:relative;}
 .screen{flex:1; display:flex; flex-direction:column; overflow-y:auto; padding-bottom:80px; -webkit-overflow-scrolling:touch; transform:translateZ(0);}
 
+/* ── HOME CARDS ── */
+.home-screen{min-height:100vh; display:flex; flex-direction:column; background:radial-gradient(ellipse at 50% 0%, rgba(201,169,110,0.07) 0%, transparent 60%);}
+.home-header{padding:40px 24px 32px; text-align:center; border-bottom:1px solid var(--glass-bd);}
+.home-brand{font-family:'Cormorant Garamond',serif; font-size:28px; font-weight:300; letter-spacing:4px; text-transform:uppercase; color:var(--white);}
+.home-subtitle{font-size:9px; letter-spacing:3px; text-transform:uppercase; color:var(--gold); margin-top:6px;}
+.home-cards{padding:28px 20px; display:flex; flex-direction:column; gap:14px;}
+.home-card{padding:22px 20px; background:var(--glass); border:1px solid var(--glass-bd); border-left:2px solid var(--gold); cursor:pointer; display:flex; align-items:center; justify-content:space-between; transition:.2s; position:relative;}
+.home-card:active{background:rgba(201,169,110,0.08);}
+.home-card-left{}
+.home-card-title{font-family:'Cormorant Garamond',serif; font-size:22px; font-weight:300; letter-spacing:2px; text-transform:uppercase;}
+.home-card-sub{font-size:10px; color:var(--gray); letter-spacing:.5px; margin-top:5px;}
+.home-card-arrow{color:var(--gold); opacity:.6;}
+.home-card-badge{position:absolute; top:12px; right:40px; background:var(--danger); color:#fff; font-size:9px; font-weight:600; padding:3px 7px; border-radius:10px; letter-spacing:.5px;}
+
+/* ── STAT CARDS ── */
+.stats-grid{display:grid; grid-template-columns:1fr 1fr; gap:1px; margin:0 20px 24px;}
+.stats-card{background:var(--glass); border:1px solid var(--glass-bd); padding:18px 14px; text-align:center;}
+.stats-num{font-family:'Cormorant Garamond',serif; font-size:32px; font-weight:300; color:var(--gold);}
+.stats-lbl{font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--gray); margin-top:4px;}
+.ranking-row{margin:0 20px 10px; padding:14px 16px; background:var(--glass); border:1px solid var(--glass-bd); display:flex; align-items:center; gap:14px;}
+.ranking-num{font-family:'Cormorant Garamond',serif; font-size:24px; color:var(--gold); width:28px; text-align:center;}
+.ranking-info{flex:1;}
+.ranking-name{font-family:'Cormorant Garamond',serif; font-size:17px;}
+.ranking-sub{font-size:10px; color:var(--gray); margin-top:2px;}
+
 /* ── TOPBAR ── */
 .topbar{display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--glass-bd); background:var(--black); position:sticky; top:0; z-index:50;}
 .topbar h2{font-family:'Cormorant Garamond',serif; font-size:18px; font-weight:400; letter-spacing:2px; text-transform:uppercase;}
@@ -299,12 +324,17 @@ function render(){
     </div>`;
     return;
   }
+  const s = state.route.screen;
   let content = "";
-  if(state.route.screen==="cliente-detail") content = renderClienteDetail(state.route.id);
-  else if(state.route.screen==="tratamiento-detail") content = renderTratamientoDetail(state.route.clienteId, state.route.tratId);
-  else if(state.route.screen==="nuevo-tratamiento") content = renderNuevoTratamiento(state.route.clienteId);
-  else if(state.tab==="notificaciones") content = renderNotificaciones();
-  else content = renderClientes();
+  let showNav = true;
+  if(s==="home")                  content = renderHome();
+  else if(s==="clientes")         content = renderClientes();
+  else if(s==="notificaciones")   content = renderNotificaciones();
+  else if(s==="estadisticas")     content = renderEstadisticas();
+  else if(s==="cliente-detail")   content = renderClienteDetail(state.route.id);
+  else if(s==="tratamiento-detail") content = renderTratamientoDetail(state.route.clienteId, state.route.tratId);
+  else if(s==="nuevo-tratamiento") content = renderNuevoTratamiento(state.route.clienteId);
+  else content = renderHome();
   app.innerHTML = content + renderBottomNav();
 }
 
@@ -316,7 +346,7 @@ async function nav(screen, params={}){
     render();
   }
 }
-function navTab(tab){ state.tab=tab; state.route={screen:"tab"}; render(); }
+function navHome(){ state.route={screen:"home"}; render(); }
 
 /* ── LOGIN ── */
 function renderLogin(){
@@ -336,7 +366,7 @@ function renderLogin(){
 function doLogin(){
   const v = document.getElementById("login-pass").value;
   if(v===ADMIN_PASS){
-    state.authed=true; state.tab="clientes"; state.route={screen:"tab"};
+    state.authed=true; state.route={screen:"home"};
     saveAuth(); render(); loadClientes();
   } else toast("Contraseña incorrecta");
 }
@@ -344,22 +374,119 @@ function doLogout(){ if(confirm('¿Cerrar sesión?')){ state.authed=false; state
 
 /* ── BOTTOM NAV ── */
 function renderBottomNav(){
-  const t = state.tab;
-  const items = [
-    {key:"clientes", label:"Clientas", icon:"clients"},
-    {key:"notificaciones", label:"Notificar", icon:"bell"},
-  ];
+  const s = state.route.screen;
   const hasPendientes = (state.pendientes||[]).length > 0;
+  const homeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>';
   return `<div class="bottom-nav">
-    ${items.map(n=>`
-      <div class="nav-item ${t===n.key && state.route.screen==='tab'?'active':''}" onclick="navTab('${n.key}')" style="position:relative;">
-        ${ic(n.icon)}
-        ${n.key==='notificaciones' && hasPendientes ? `<span style="position:absolute;top:8px;right:calc(50% - 14px);width:8px;height:8px;background:var(--danger);border-radius:50%;"></span>` : ''}
-        <span>${n.label}</span>
-      </div>`).join('')}
+    <div class="nav-item ${s==='home'?'active':''}" onclick="navHome()">
+      ${homeIcon}<span>Inicio</span>
+    </div>
+    <div class="nav-item ${s==='clientes'?'active':''}" onclick="nav('clientes')">
+      ${ic('clients')}<span>Clientas</span>
+    </div>
+    <div class="nav-item ${s==='notificaciones'?'active':''}" onclick="nav('notificaciones')" style="position:relative;">
+      ${ic('bell')}
+      ${hasPendientes?`<span style="position:absolute;top:8px;right:calc(50% - 14px);width:8px;height:8px;background:var(--danger);border-radius:50%;"></span>`:''}
+      <span>Alertas</span>
+    </div>
     <div class="nav-item" onclick="doLogout()">
       ${ic('logout')}<span>Salir</span>
     </div>
+  </div>`;
+}
+
+/* ── HOME ── */
+function renderHome(){
+  const pendientes = state.pendientes||[];
+  const hoy = new Date();
+  const mesHoy = String(hoy.getMonth()+1).padStart(2,'0');
+  const cumplesMes = state.clientes.filter(c=>c.fecha_nacimiento&&c.fecha_nacimiento.split('-')[1]===mesHoy).length;
+  const conCita = state.clientes.filter(c=>c.proxima_cita_fecha).length;
+  const arrowSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><polyline points="9 18 15 12 9 6"/></svg>';
+  return `
+  <div class="home-screen">
+    <div class="home-header">
+      <div class="home-brand">Salon Visagista</div>
+      <div class="home-subtitle">Panel de Administración</div>
+    </div>
+    <div class="home-cards">
+      <div class="home-card" onclick="nav('clientes')">
+        <div class="home-card-left">
+          <div class="home-card-title">Clientas</div>
+          <div class="home-card-sub">${state.clientes.length} registradas${conCita>0?' · '+conCita+' con turno próximo':''}</div>
+        </div>
+        <div class="home-card-arrow">${arrowSvg}</div>
+      </div>
+      <div class="home-card" onclick="nav('estadisticas')">
+        <div class="home-card-left">
+          <div class="home-card-title">Estadísticas</div>
+          <div class="home-card-sub">Actividad general y por clienta</div>
+        </div>
+        <div class="home-card-arrow">${arrowSvg}</div>
+      </div>
+      <div class="home-card" onclick="nav('notificaciones')">
+        <div class="home-card-left">
+          <div class="home-card-title">Notificaciones</div>
+          <div class="home-card-sub">${pendientes.length>0?pendientes.length+' pendiente'+(pendientes.length!==1?'s':'')+' para hoy':cumplesMes>0?cumplesMes+' cumpleaños este mes':'Sin alertas pendientes'}</div>
+        </div>
+        ${pendientes.length>0?`<span class="home-card-badge">${pendientes.length}</span>`:''}
+        <div class="home-card-arrow">${arrowSvg}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ── ESTADÍSTICAS ── */
+function renderEstadisticas(){
+  const clientes = state.clientes;
+  const totalVisitas = clientes.reduce((s,c)=>s+(c.tratamientos||[]).length,0);
+  const todosServicios = clientes.flatMap(c=>(c.tratamientos||[]).map(t=>t.servicio));
+  const conteoServ = {};
+  todosServicios.forEach(s=>{ conteoServ[s]=(conteoServ[s]||0)+1; });
+  const topServicio = Object.entries(conteoServ).sort((a,b)=>b[1]-a[1])[0];
+  const hoy = new Date();
+  const mesHoy = String(hoy.getMonth()+1).padStart(2,'0');
+  const anoHoy = hoy.getFullYear();
+  const visitasMes = clientes.reduce((s,c)=>{
+    return s+(c.tratamientos||[]).filter(t=>t.fecha&&t.fecha.startsWith(`${anoHoy}-${mesHoy}`)).length;
+  },0);
+  const ranking = clientes.map(c=>({...c,count:(c.tratamientos||[]).length})).filter(c=>c.count>0).sort((a,b)=>b.count-a.count).slice(0,10);
+  const meses=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  return `
+  <div class="screen">
+    <div class="topbar">
+      <button class="back-btn" onclick="navHome()">${ic('chevron')}</button>
+      <h2 style="font-size:14px;letter-spacing:1px;">Estadísticas</h2>
+      <div style="width:36px;"></div>
+    </div>
+    <div class="section-header" style="padding-top:20px;">
+      <span class="section-title" style="font-size:22px;">General</span>
+    </div>
+    <div class="stats-grid">
+      <div class="stats-card"><div class="stats-num">${clientes.length}</div><div class="stats-lbl">Clientas</div></div>
+      <div class="stats-card"><div class="stats-num">${totalVisitas}</div><div class="stats-lbl">Visitas totales</div></div>
+      <div class="stats-card"><div class="stats-num">${visitasMes}</div><div class="stats-lbl">Visitas ${meses[hoy.getMonth()]}</div></div>
+      <div class="stats-card"><div class="stats-num">${clientes.filter(c=>c.proxima_cita_fecha).length}</div><div class="stats-lbl">Turnos agendados</div></div>
+    </div>
+    ${topServicio?`
+    <div style="margin:0 20px 24px;padding:16px;background:var(--glass);border:1px solid var(--glass-bd);">
+      <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;">Servicio más popular</div>
+      <div style="font-family:'Cormorant Garamond',serif;font-size:22px;">${topServicio[0]}</div>
+      <div style="font-size:11px;color:var(--gray);margin-top:3px;">${topServicio[1]} vez${topServicio[1]!==1?'ces':''}</div>
+    </div>`:''}
+    ${ranking.length>0?`
+    <div class="section-header" style="padding-top:4px;">
+      <span class="section-title" style="font-size:22px;">Ranking Clientas</span>
+    </div>
+    ${ranking.map((c,i)=>`
+      <div class="ranking-row" onclick="nav('cliente-detail',{id:'${c.id}'})">
+        <div class="ranking-num">${i+1}</div>
+        <div class="ranking-info">
+          <div class="ranking-name">${c.nombre}</div>
+          <div class="ranking-sub">${c.count} visita${c.count!==1?'s':''} · Último: ${c.tratamientos.slice().sort((a,b)=>b.fecha.localeCompare(a.fecha))[0]?.servicio||''}</div>
+        </div>
+      </div>`).join('')}
+    `:'<div class="empty-state"><p>Sin datos aún</p></div>'}
   </div>`;
 }
 
@@ -368,7 +495,8 @@ function renderClientes(){
   return `
   <div class="screen">
     <div class="topbar">
-      <div class="topbar-logo">Salon Visagista</div>
+      <button class="back-btn" onclick="navHome()">${ic('chevron')}</button>
+      <h2 style="font-size:14px;letter-spacing:2px;">Clientas</h2>
       <button class="icon-btn" onclick="loadClientes()" style="border:none;background:none;color:var(--gray);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.02-4.92"/></svg>
       </button>
@@ -412,7 +540,7 @@ function renderClienteDetail(id){
   return `
   <div class="screen">
     <div class="topbar">
-      <button class="back-btn" onclick="navTab('clientes')">${ic('chevron')}</button>
+      <button class="back-btn" onclick="nav('clientes')">${ic('chevron')}</button>
       <h2 style="font-size:14px;letter-spacing:1px;">${c.nombre.toUpperCase()}</h2>
       <button class="icon-btn" style="border:none;background:none;color:var(--gold);" onclick="openEditarClientaModal('${c.id}')">${ic('edit')}</button>
     </div>
@@ -693,7 +821,7 @@ async function eliminarClienta(id){
     await sbFetch(`clientes?id=eq.${id}`,"DELETE");
     state.clientes = state.clientes.filter(c=>c.id!==id);
     delete state.tratCache[id];
-    toast("Clienta eliminada"); navTab("clientes");
+    toast("Clienta eliminada"); nav("clientes");
   }catch(e){ console.error(e); toast("Error al eliminar"); }
 }
 
@@ -830,8 +958,11 @@ function renderNotificaciones(){
   const pendientes = state.pendientes||[];
   return `
   <div class="screen">
-    <div class="topbar"><div class="topbar-logo">Salon Visagista</div></div>
-    <div class="section-header"><span class="section-title">Notificaciones</span></div>
+    <div class="topbar">
+      <button class="back-btn" onclick="navHome()">${ic('chevron')}</button>
+      <h2 style="font-size:14px;letter-spacing:2px;">Notificaciones</h2>
+      <div style="width:36px;"></div>
+    </div>
     ${pendientes.length>0 ? `
     <div style="padding:0 20px;">
       <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--danger);margin-bottom:14px;">● ${pendientes.length} pendiente${pendientes.length!==1?'s':''} para hoy</div>
