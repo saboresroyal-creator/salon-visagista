@@ -146,9 +146,14 @@ textarea.form-input:focus{border-color:var(--gold);}
 .stat-lbl{font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:var(--gray); margin-top:4px;}
 
 /* ── NOTIFICATION PREVIEW ── */
-.notif-preview{margin:0 20px 16px; padding:16px; background:rgba(201,169,110,0.06); border:1px solid rgba(201,169,110,0.25);}
+.notif-preview{margin:0 0 16px; padding:16px; background:rgba(201,169,110,0.06); border:1px solid rgba(201,169,110,0.25);}
 .notif-preview-label{font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--gold); margin-bottom:8px;}
 .notif-preview-text{font-size:13px; color:rgba(255,255,255,0.8); line-height:1.6;}
+
+/* ── LOADING ── */
+.loading-screen{min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px;}
+.loading-dot{width:6px; height:6px; background:var(--gold); border-radius:50%; animation:pulse 1.2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:.2;}50%{opacity:1;}}
 
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:4px;}
@@ -166,23 +171,61 @@ textarea.form-input:focus{border-color:var(--gold);}
    ═══════════════════════════════════════ */
 
 const ADMIN_PASS = "visagista2024";
-const WA_NUMBER  = "549XXXXXXXXXX"; // reemplazar con número real
+const WA_NUMBER  = "549XXXXXXXXXX";
+const SB_URL = "https://nyywkcpyuhhpwignmtgz.supabase.co";
+const SB_KEY = "sb_publishable_DMP1PYRRUOR2wUqG_u0XAg_5V9ROPk8";
+
+/* ── SUPABASE API ── */
+async function sbFetch(path, method="GET", body=null, prefer=""){
+  const opts = {
+    method,
+    headers: {
+      'apikey': SB_KEY,
+      'Authorization': `Bearer ${SB_KEY}`,
+      'Content-Type': 'application/json',
+    }
+  };
+  if(prefer) opts.headers['Prefer'] = prefer;
+  if(body != null) opts.body = JSON.stringify(body);
+  const res = await fetch(`${SB_URL}/rest/v1/${path}`, opts);
+  if(!res.ok){ const t = await res.text(); throw new Error(t); }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
 
 /* ── STATE ── */
 let state = {
   authed: false,
   tab: "clientes",
   clientes: [],
-  servicios: ["Coloración", "Corte", "Tratamiento Kerastase", "Brushing", "Mechas", "Permanente", "Alisado", "Hidratación"],
+  servicios: ["Coloración","Corte","Tratamiento Kerastase","Brushing","Mechas","Permanente","Alisado","Hidratación"],
   route: {screen:"login"},
   clienteQ: "",
+  tratCache: {},
+  loading: false,
 };
 
-function loadState(){
-  try{ const s = localStorage.getItem("visagista_state"); if(s) Object.assign(state, JSON.parse(s)); }catch(e){}
+function loadLocalState(){ try{ if(localStorage.getItem("vs_auth")==="1") state.authed=true; }catch(e){} }
+function saveAuth(){ try{ localStorage.setItem("vs_auth", state.authed?"1":"0"); }catch(e){} }
+
+/* ── SUPABASE DATA LAYER ── */
+async function loadClientes(){
+  state.loading = true; render();
+  try{
+    const data = await sbFetch('clientes?select=*,tratamientos(id,servicio,fecha)&order=nombre.asc');
+    state.clientes = (data||[]).map(c=>({
+      ...c,
+      tratamientos: (c.tratamientos||[]).sort((a,b)=>a.fecha.localeCompare(b.fecha))
+    }));
+  }catch(e){ console.error(e); toast("Error al cargar datos"); }
+  state.loading = false; render();
 }
-function saveState(){
-  try{ localStorage.setItem("visagista_state", JSON.stringify(state)); }catch(e){}
+
+async function loadTratamientos(clienteId){
+  try{
+    const data = await sbFetch(`tratamientos?cliente_id=eq.${clienteId}&select=*&order=fecha.desc`);
+    state.tratCache[clienteId] = data||[];
+  }catch(e){ console.error(e); toast("Error al cargar historial"); }
 }
 
 /* ── ICONS ── */
@@ -190,7 +233,6 @@ function ic(name){
   const icons = {
     clients:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="7" r="4"/><path d="M2 21v-1a7 7 0 0 1 7-7h0"/><circle cx="19" cy="17" r="3"/><path d="M16 17h6M19 14v6"/></svg>',
     history:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>',
-    scissors:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>',
     bell:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
     chevron:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="15 18 9 12 15 6"/></svg>',
     plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
@@ -215,19 +257,31 @@ function toast(msg){
 function render(){
   const app = document.getElementById("app");
   if(!state.authed){ app.innerHTML = renderLogin(); return; }
-  const {tab} = state;
+  if(state.loading){
+    app.innerHTML = `<div class="loading-screen">
+      <div style="font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--gold);letter-spacing:4px;text-transform:uppercase;">Salon Visagista</div>
+      <div class="loading-dot"></div>
+    </div>`;
+    return;
+  }
   let content = "";
   if(state.route.screen==="cliente-detail") content = renderClienteDetail(state.route.id);
   else if(state.route.screen==="tratamiento-detail") content = renderTratamientoDetail(state.route.clienteId, state.route.tratId);
   else if(state.route.screen==="nuevo-tratamiento") content = renderNuevoTratamiento(state.route.clienteId);
-  else if(tab==="clientes") content = renderClientes();
-  else if(tab==="notificaciones") content = renderNotificaciones();
+  else if(state.tab==="notificaciones") content = renderNotificaciones();
   else content = renderClientes();
   app.innerHTML = content + renderBottomNav();
 }
 
-function nav(screen, params={}){ state.route = {screen, ...params}; render(); }
-function navTab(tab){ state.tab = tab; state.route = {screen:"tab"}; render(); }
+async function nav(screen, params={}){
+  state.route = {screen, ...params};
+  render();
+  if(screen==="cliente-detail"){
+    await loadTratamientos(params.id);
+    render();
+  }
+}
+function navTab(tab){ state.tab=tab; state.route={screen:"tab"}; render(); }
 
 /* ── LOGIN ── */
 function renderLogin(){
@@ -246,37 +300,40 @@ function renderLogin(){
 }
 function doLogin(){
   const v = document.getElementById("login-pass").value;
-  if(v === ADMIN_PASS){ state.authed = true; state.tab = "clientes"; state.route={screen:"tab"}; render(); }
-  else toast("Contraseña incorrecta");
+  if(v===ADMIN_PASS){
+    state.authed=true; state.tab="clientes"; state.route={screen:"tab"};
+    saveAuth(); render(); loadClientes();
+  } else toast("Contraseña incorrecta");
 }
+function doLogout(){ if(confirm('¿Cerrar sesión?')){ state.authed=false; state.clientes=[]; state.tratCache={}; saveAuth(); render(); } }
 
 /* ── BOTTOM NAV ── */
 function renderBottomNav(){
   const t = state.tab;
-  const nav_items = [
+  const items = [
     {key:"clientes", label:"Clientas", icon:"clients"},
     {key:"notificaciones", label:"Notificar", icon:"bell"},
   ];
   return `<div class="bottom-nav">
-    ${nav_items.map(n=>`
+    ${items.map(n=>`
       <div class="nav-item ${t===n.key && state.route.screen==='tab'?'active':''}" onclick="navTab('${n.key}')">
         ${ic(n.icon)}<span>${n.label}</span>
       </div>`).join('')}
-    <div class="nav-item" onclick="if(confirm('¿Cerrar sesión?')){state.authed=false;render();}">
+    <div class="nav-item" onclick="doLogout()">
       ${ic('logout')}<span>Salir</span>
     </div>
   </div>`;
 }
 
-/* ── CLIENTES ── */
+/* ── CLIENTES LIST ── */
 function renderClientes(){
-  const q = (state.clienteQ||'').toLowerCase().trim();
-  const list = q ? state.clientes.filter(c=>c.nombre.toLowerCase().includes(q)||c.telefono?.includes(q)) : state.clientes;
   return `
   <div class="screen">
     <div class="topbar">
       <div class="topbar-logo">Salon Visagista</div>
-      <button class="icon-btn" onclick="doLogout()" style="border:none; background:none;">${ic('logout')}</button>
+      <button class="icon-btn" onclick="loadClientes()" style="border:none;background:none;color:var(--gray);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.02-4.92"/></svg>
+      </button>
     </div>
     <div class="section-header">
       <span class="section-title">Clientas</span>
@@ -297,7 +354,8 @@ function renderClientesList(){
   if(list.length===0) return `<div class="empty-state"><p>Sin clientas aún</p><div class="empty-state-sub">Tocá + para agregar la primera</div></div>`;
   return list.map(c=>{
     const tratCount = (c.tratamientos||[]).length;
-    const last = tratCount>0 ? c.tratamientos[tratCount-1] : null;
+    const sorted = (c.tratamientos||[]).slice().sort((a,b)=>b.fecha.localeCompare(a.fecha));
+    const last = sorted[0]||null;
     return `
     <div class="client-card" onclick="nav('cliente-detail',{id:'${c.id}'})">
       <div class="client-card-name">${c.nombre}</div>
@@ -306,19 +364,19 @@ function renderClientesList(){
     </div>`;
   }).join('');
 }
-function doLogout(){ if(confirm('¿Cerrar sesión?')){ state.authed=false; render(); } }
 
 /* ── DETALLE CLIENTA ── */
 function renderClienteDetail(id){
   const c = state.clientes.find(x=>x.id===id);
   if(!c) return renderClientes();
-  const tratas = (c.tratamientos||[]).slice().reverse();
+  const tratas = state.tratCache[id];
+  const loading = tratas === undefined;
   return `
   <div class="screen">
     <div class="topbar">
       <button class="back-btn" onclick="navTab('clientes')">${ic('chevron')}</button>
-      <h2 style="font-size:14px; letter-spacing:1px;">${c.nombre.toUpperCase()}</h2>
-      <button class="icon-btn" style="border:none; background:none; color:var(--gold);" onclick="openEditarClientaModal('${c.id}')">${ic('edit')}</button>
+      <h2 style="font-size:14px;letter-spacing:1px;">${c.nombre.toUpperCase()}</h2>
+      <button class="icon-btn" style="border:none;background:none;color:var(--gold);" onclick="openEditarClientaModal('${c.id}')">${ic('edit')}</button>
     </div>
     <div class="detail-header">
       <div class="detail-name">${c.nombre}</div>
@@ -326,24 +384,28 @@ function renderClienteDetail(id){
         ${c.telefono?`<span>${c.telefono}</span><br>`:''}
         ${c.email?`<span class="detail-gold">${c.email}</span><br>`:''}
         ${c.direccion?`<span>${c.direccion}</span><br>`:''}
-        ${c.notas?`<span style="color:var(--gray); font-style:italic;">${c.notas}</span>`:''}
+        ${c.notas?`<span style="color:var(--gray);font-style:italic;">${c.notas}</span>`:''}
       </div>
     </div>
     <div class="stat-row" style="margin-top:20px;">
-      <div class="stat-box"><div class="stat-num">${(c.tratamientos||[]).length}</div><div class="stat-lbl">Visitas</div></div>
-      <div class="stat-box"><div class="stat-num">${[...new Set((c.tratamientos||[]).map(t=>t.servicio))].length}</div><div class="stat-lbl">Servicios</div></div>
+      <div class="stat-box"><div class="stat-num">${loading?'…':(tratas||[]).length}</div><div class="stat-lbl">Visitas</div></div>
+      <div class="stat-box"><div class="stat-num">${loading?'…':[...new Set((tratas||[]).map(t=>t.servicio))].length}</div><div class="stat-lbl">Servicios</div></div>
     </div>
     <div class="section-header" style="padding-top:8px;">
       <span class="section-title" style="font-size:22px;">Historial</span>
     </div>
-    ${tratas.length===0 ? `<div class="empty-state"><p>Sin tratamientos</p></div>` : tratas.map(t=>`
-      <div class="trat-row" onclick="nav('tratamiento-detail',{clienteId:'${c.id}',tratId:'${t.id}'})">
-        <div class="trat-date">${formatDate(t.fecha)}</div>
-        <div class="trat-service">${t.servicio}</div>
-        ${t.obs?`<div class="trat-obs">${t.obs}</div>`:''}
-        ${(t.fotos||[]).length>0?`<div style="font-size:10px; color:var(--gold); letter-spacing:1px; margin-top:6px;">${t.fotos.length} foto${t.fotos.length!==1?'s':''}</div>`:''}
-      </div>`).join('')}
-    <div style="padding:20px; display:flex; flex-direction:column; gap:10px;">
+    ${loading
+      ? `<div class="empty-state"><div class="loading-dot" style="margin:0 auto;"></div></div>`
+      : (tratas||[]).length===0
+        ? `<div class="empty-state"><p>Sin tratamientos</p></div>`
+        : tratas.map(t=>`
+          <div class="trat-row" onclick="nav('tratamiento-detail',{clienteId:'${c.id}',tratId:'${t.id}'})">
+            <div class="trat-date">${formatDate(t.fecha)}</div>
+            <div class="trat-service">${t.servicio}</div>
+            ${t.obs?`<div class="trat-obs">${t.obs}</div>`:''}
+            ${(t.fotos||[]).length>0?`<div style="font-size:10px;color:var(--gold);letter-spacing:1px;margin-top:6px;">${t.fotos.length} foto${t.fotos.length!==1?'s':''}</div>`:''}
+          </div>`).join('')}
+    <div style="padding:20px;display:flex;flex-direction:column;gap:10px;">
       <button class="btn-gold" onclick="nav('nuevo-tratamiento',{clienteId:'${c.id}'})">+ Nueva Visita</button>
       <button class="btn-outline" onclick="enviarNotificacion('${c.id}')">Enviar Notificación WhatsApp</button>
       <button class="btn-danger" onclick="eliminarClienta('${c.id}')">Eliminar Clienta</button>
@@ -354,27 +416,28 @@ function renderClienteDetail(id){
 /* ── DETALLE TRATAMIENTO ── */
 function renderTratamientoDetail(clienteId, tratId){
   const c = state.clientes.find(x=>x.id===clienteId);
-  const t = (c?.tratamientos||[]).find(x=>x.id===tratId);
+  const tratas = state.tratCache[clienteId]||[];
+  const t = tratas.find(x=>x.id===tratId);
   if(!c||!t) return renderClientes();
   return `
   <div class="screen">
     <div class="topbar">
       <button class="back-btn" onclick="nav('cliente-detail',{id:'${clienteId}'})">${ic('chevron')}</button>
-      <h2 style="font-size:14px; letter-spacing:1px;">Tratamiento</h2>
-      <button class="icon-btn" style="border:none; background:none; color:var(--gold);" onclick="openEditarTratamientoModal('${clienteId}','${tratId}')">${ic('edit')}</button>
+      <h2 style="font-size:14px;letter-spacing:1px;">Tratamiento</h2>
+      <button class="icon-btn" style="border:none;background:none;color:var(--gold);" onclick="openEditarTratamientoModal('${clienteId}','${tratId}')">${ic('edit')}</button>
     </div>
     <div class="detail-header">
       <div class="trat-date" style="margin-bottom:8px;">${formatDate(t.fecha)}</div>
       <div class="detail-name" style="font-size:26px;">${t.servicio}</div>
       ${t.productos?`<div class="detail-info" style="margin-top:8px;">Productos: <span class="detail-gold">${t.productos}</span></div>`:''}
     </div>
-    ${t.obs?`<div style="padding:20px 20px 0;"><div class="form-label">Observaciones</div><p style="font-size:14px; color:rgba(255,255,255,0.8); line-height:1.7;">${t.obs}</p></div>`:''}
+    ${t.obs?`<div style="padding:20px 20px 0;"><div class="form-label">Observaciones</div><p style="font-size:14px;color:rgba(255,255,255,0.8);line-height:1.7;">${t.obs}</p></div>`:''}
     ${(t.fotos||[]).length>0?`
       <div style="padding:20px 20px 0;"><div class="form-label">Fotos</div></div>
       <div class="photo-grid" style="padding:0 20px;">
         ${t.fotos.map((f,i)=>`<div class="photo-thumb"><img src="${f}" onclick="openPhotoViewer('${clienteId}','${tratId}',${i})"></div>`).join('')}
       </div>`:''}
-    <div style="padding:20px; display:flex; flex-direction:column; gap:10px;">
+    <div style="padding:20px;display:flex;flex-direction:column;gap:10px;">
       <button class="btn-danger" onclick="eliminarTratamiento('${clienteId}','${tratId}')">Eliminar Tratamiento</button>
     </div>
   </div>`;
@@ -389,13 +452,13 @@ function renderNuevoTratamiento(clienteId){
   <div class="screen">
     <div class="topbar">
       <button class="back-btn" onclick="nav('cliente-detail',{id:'${clienteId}'})">${ic('chevron')}</button>
-      <h2 style="font-size:14px; letter-spacing:1px;">Nueva Visita</h2>
+      <h2 style="font-size:14px;letter-spacing:1px;">Nueva Visita</h2>
       <div style="width:36px;"></div>
     </div>
     <div class="form-section">
       <div class="form-group">
         <label class="form-label">Clienta</label>
-        <p style="font-family:'Cormorant Garamond',serif; font-size:20px; color:var(--gold);">${c?.nombre||''}</p>
+        <p style="font-family:'Cormorant Garamond',serif;font-size:20px;color:var(--gold);">${c?.nombre||''}</p>
       </div>
       <div class="form-group">
         <label class="form-label">Fecha</label>
@@ -403,7 +466,7 @@ function renderNuevoTratamiento(clienteId){
       </div>
       <div class="form-group">
         <label class="form-label">Servicio / Tratamiento</label>
-        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
           ${state.servicios.map(s=>`<span class="tag" id="tag-${s.replace(/\s/g,'_')}" onclick="selectServicio('${s}',this)">${s}</span>`).join('')}
         </div>
         <input class="form-input" type="text" id="trat-servicio" placeholder="O escribí el servicio…" oninput="tratDraft.servicio=this.value">
@@ -419,7 +482,7 @@ function renderNuevoTratamiento(clienteId){
       <div class="form-group">
         <label class="form-label">Fotos</label>
         <div class="photo-upload-area">
-          <input type="file" accept="image/*" multiple onchange="onTratFotosSelected(event,'${clienteId}')">
+          <input type="file" accept="image/*" multiple onchange="onTratFotosSelected(event)">
           <div>${ic('photo')}</div>
           <div class="photo-upload-label" style="margin-top:8px;">Agregar fotos</div>
         </div>
@@ -435,9 +498,8 @@ function selectServicio(s, el){
   document.querySelectorAll('.tag').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
 }
-function onTratFotosSelected(event, clienteId){
-  const files = Array.from(event.target.files);
-  files.forEach(file=>{
+function onTratFotosSelected(event){
+  Array.from(event.target.files).forEach(file=>{
     const reader = new FileReader();
     reader.onload = e=>{ tratDraft.fotos.push(e.target.result); renderTratFotosPreview(); };
     reader.readAsDataURL(file);
@@ -452,30 +514,34 @@ function renderTratFotosPreview(){
       <button class="photo-thumb-del" onclick="tratDraft.fotos.splice(${i},1);renderTratFotosPreview()">×</button>
     </div>`).join('')}</div>`;
 }
-function guardarTratamiento(clienteId){
-  const servicio = document.getElementById("trat-servicio")?.value.trim() || tratDraft.servicio;
+async function guardarTratamiento(clienteId){
+  const servicio = (document.getElementById("trat-servicio")?.value.trim())||tratDraft.servicio;
   if(!servicio){ toast("Ingresá el servicio"); return; }
-  const c = state.clientes.find(x=>x.id===clienteId);
-  if(!c) return;
-  const t = {
-    id: "t"+Date.now(),
-    fecha: document.getElementById("trat-fecha")?.value || new Date().toISOString().split('T')[0],
+  const data = {
+    cliente_id: clienteId,
+    fecha: document.getElementById("trat-fecha")?.value||new Date().toISOString().split('T')[0],
     servicio,
     productos: document.getElementById("trat-productos")?.value.trim()||"",
     obs: document.getElementById("trat-obs")?.value.trim()||"",
-    fotos: tratDraft.fotos.slice(),
+    fotos: tratDraft.fotos,
   };
-  if(!c.tratamientos) c.tratamientos = [];
-  c.tratamientos.push(t);
-  saveState();
-  toast("Visita guardada");
-  nav("cliente-detail",{id:clienteId});
+  try{
+    const [newT] = await sbFetch("tratamientos","POST",data,"return=representation");
+    // Actualizar cache
+    if(!state.tratCache[clienteId]) state.tratCache[clienteId]=[];
+    state.tratCache[clienteId].unshift(newT);
+    // Actualizar lista embebida del cliente
+    const c = state.clientes.find(x=>x.id===clienteId);
+    if(c){ if(!c.tratamientos) c.tratamientos=[]; c.tratamientos.push({id:newT.id,servicio:newT.servicio,fecha:newT.fecha}); }
+    toast("Visita guardada");
+    nav("cliente-detail",{id:clienteId});
+  }catch(e){ console.error(e); toast("Error al guardar la visita"); }
 }
 
 /* ── EDITAR TRATAMIENTO ── */
 function openEditarTratamientoModal(clienteId, tratId){
-  const c = state.clientes.find(x=>x.id===clienteId);
-  const t = (c?.tratamientos||[]).find(x=>x.id===tratId);
+  const tratas = state.tratCache[clienteId]||[];
+  const t = tratas.find(x=>x.id===tratId);
   if(!t) return;
   const overlay = document.createElement("div");
   overlay.className="modal-overlay"; overlay.id="trat-edit-overlay";
@@ -492,21 +558,34 @@ function openEditarTratamientoModal(clienteId, tratId){
     </div>`;
   document.body.appendChild(overlay);
 }
-function guardarEditTrat(clienteId,tratId){
-  const c=state.clientes.find(x=>x.id===clienteId);
-  const t=(c?.tratamientos||[]).find(x=>x.id===tratId);
-  if(!t) return;
-  t.servicio=document.getElementById("et-serv").value.trim()||t.servicio;
-  t.productos=document.getElementById("et-prod").value.trim();
-  t.obs=document.getElementById("et-obs").value.trim();
-  saveState(); document.getElementById("trat-edit-overlay").remove();
-  toast("Tratamiento actualizado"); nav("tratamiento-detail",{clienteId,tratId});
+async function guardarEditTrat(clienteId, tratId){
+  const data = {
+    servicio: document.getElementById("et-serv").value.trim(),
+    productos: document.getElementById("et-prod").value.trim(),
+    obs: document.getElementById("et-obs").value.trim(),
+  };
+  if(!data.servicio){ toast("El servicio es obligatorio"); return; }
+  try{
+    await sbFetch(`tratamientos?id=eq.${tratId}`,"PATCH",data);
+    const tratas = state.tratCache[clienteId]||[];
+    const t = tratas.find(x=>x.id===tratId); if(t) Object.assign(t,data);
+    const c = state.clientes.find(x=>x.id===clienteId);
+    const et = (c?.tratamientos||[]).find(x=>x.id===tratId); if(et) et.servicio=data.servicio;
+    document.getElementById("trat-edit-overlay").remove();
+    toast("Tratamiento actualizado");
+    nav("tratamiento-detail",{clienteId,tratId});
+  }catch(e){ console.error(e); toast("Error al guardar"); }
 }
-function eliminarTratamiento(clienteId,tratId){
+async function eliminarTratamiento(clienteId, tratId){
   if(!confirm("¿Eliminar este tratamiento?")) return;
-  const c=state.clientes.find(x=>x.id===clienteId);
-  c.tratamientos=(c.tratamientos||[]).filter(t=>t.id!==tratId);
-  saveState(); toast("Eliminado"); nav("cliente-detail",{id:clienteId});
+  try{
+    await sbFetch(`tratamientos?id=eq.${tratId}`,"DELETE");
+    state.tratCache[clienteId]=(state.tratCache[clienteId]||[]).filter(t=>t.id!==tratId);
+    const c = state.clientes.find(x=>x.id===clienteId);
+    if(c) c.tratamientos=(c.tratamientos||[]).filter(t=>t.id!==tratId);
+    toast("Eliminado");
+    nav("cliente-detail",{id:clienteId});
+  }catch(e){ console.error(e); toast("Error al eliminar"); }
 }
 
 /* ── MODAL NUEVA/EDITAR CLIENTA ── */
@@ -531,25 +610,37 @@ function openClientaModal(id){
     </div>`;
   document.body.appendChild(overlay);
 }
-function guardarClienta(id){
-  const nombre=document.getElementById("cm-nombre").value.trim();
+async function guardarClienta(id){
+  const nombre = document.getElementById("cm-nombre").value.trim();
   if(!nombre){ toast("El nombre es obligatorio"); return; }
-  const data={
+  const data = {
     nombre,
-    telefono:document.getElementById("cm-tel").value.trim(),
-    email:document.getElementById("cm-email").value.trim(),
-    direccion:document.getElementById("cm-dir").value.trim(),
-    notas:document.getElementById("cm-notas").value.trim(),
+    telefono: document.getElementById("cm-tel").value.trim(),
+    email: document.getElementById("cm-email").value.trim(),
+    direccion: document.getElementById("cm-dir").value.trim(),
+    notas: document.getElementById("cm-notas").value.trim(),
   };
-  if(id){ const c=state.clientes.find(x=>x.id===id); Object.assign(c,data); }
-  else{ state.clientes.push({id:"c"+Date.now(), tratamientos:[], ...data}); }
-  saveState(); document.getElementById("clienta-modal").remove();
-  toast("Clienta guardada"); render();
+  try{
+    if(id){
+      await sbFetch(`clientes?id=eq.${id}`,"PATCH",data);
+      const c = state.clientes.find(x=>x.id===id); if(c) Object.assign(c,data);
+    } else {
+      const [newC] = await sbFetch("clientes","POST",data,"return=representation");
+      state.clientes.push({...newC, tratamientos:[]});
+      state.clientes.sort((a,b)=>a.nombre.localeCompare(b.nombre));
+    }
+    document.getElementById("clienta-modal").remove();
+    toast("Clienta guardada"); render();
+  }catch(e){ console.error(e); toast("Error al guardar"); }
 }
-function eliminarClienta(id){
+async function eliminarClienta(id){
   if(!confirm("¿Eliminar esta clienta y todo su historial?")) return;
-  state.clientes=state.clientes.filter(c=>c.id!==id);
-  saveState(); toast("Clienta eliminada"); navTab("clientes");
+  try{
+    await sbFetch(`clientes?id=eq.${id}`,"DELETE");
+    state.clientes = state.clientes.filter(c=>c.id!==id);
+    delete state.tratCache[id];
+    toast("Clienta eliminada"); navTab("clientes");
+  }catch(e){ console.error(e); toast("Error al eliminar"); }
 }
 
 /* ── NOTIFICACIONES ── */
@@ -557,14 +648,10 @@ function renderNotificaciones(){
   const conTel = state.clientes.filter(c=>c.telefono);
   return `
   <div class="screen">
-    <div class="topbar">
-      <div class="topbar-logo">Salon Visagista</div>
-    </div>
-    <div class="section-header">
-      <span class="section-title">Notificaciones</span>
-    </div>
+    <div class="topbar"><div class="topbar-logo">Salon Visagista</div></div>
+    <div class="section-header"><span class="section-title">Notificaciones</span></div>
     <div style="padding:0 20px 20px;">
-      <p style="font-size:12px; color:var(--gray); letter-spacing:.5px; line-height:1.7; margin-bottom:24px;">Enviá un mensaje personalizado post-tratamiento a tus clientas por WhatsApp.</p>
+      <p style="font-size:12px;color:var(--gray);letter-spacing:.5px;line-height:1.7;margin-bottom:24px;">Enviá un mensaje personalizado post-tratamiento a tus clientas por WhatsApp.</p>
       <div class="form-group">
         <label class="form-label">Clienta</label>
         <select class="form-input" id="notif-cliente" onchange="previewNotif()">
@@ -574,7 +661,7 @@ function renderNotificaciones(){
       </div>
       <div class="form-group">
         <label class="form-label">Mensaje</label>
-        <textarea class="form-input" id="notif-msg" rows="5" placeholder="Escribí el mensaje post-tratamiento…" oninput="previewNotif()">Hola {nombre}, fue un placer atenderte hoy en Salon Visagista. ✨ Tu tratamiento quedó impecable. ¡Te esperamos pronto!</textarea>
+        <textarea class="form-input" id="notif-msg" rows="5" placeholder="Escribí el mensaje…" oninput="previewNotif()">Hola {nombre}, fue un placer atenderte hoy en Salon Visagista. ✨ Tu tratamiento quedó impecable. ¡Te esperamos pronto!</textarea>
       </div>
       <div id="notif-preview"></div>
       <button class="btn-gold" onclick="enviarNotifCustom()">Enviar por WhatsApp</button>
@@ -585,15 +672,15 @@ function previewNotif(){
   const clienteId=document.getElementById("notif-cliente")?.value;
   const msg=document.getElementById("notif-msg")?.value||"";
   const c=state.clientes.find(x=>x.id===clienteId);
-  const texto=msg.replace("{nombre}", c?.nombre?.split(" ")[0]||"clienta");
+  const texto=msg.replace("{nombre}",c?.nombre?.split(" ")[0]||"clienta");
   const el=document.getElementById("notif-preview");
   if(el) el.innerHTML=`<div class="notif-preview"><div class="notif-preview-label">Vista previa</div><div class="notif-preview-text">${texto}</div></div>`;
 }
 function enviarNotificacion(clienteId){
   const c=state.clientes.find(x=>x.id===clienteId);
   if(!c?.telefono){ toast("La clienta no tiene teléfono registrado"); return; }
-  const tratas=c.tratamientos||[];
-  const last=tratas[tratas.length-1];
+  const tratas=state.tratCache[clienteId]||[];
+  const last=tratas[0];
   const msg=`Hola ${c.nombre.split(" ")[0]}, fue un placer atenderte hoy en Salon Visagista. ✨${last?` Tu ${last.servicio.toLowerCase()} quedó impecable.`:''} ¡Te esperamos pronto!`;
   const tel=c.telefono.replace(/\D/g,"");
   window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`,"_blank");
@@ -612,8 +699,8 @@ function enviarNotifCustom(){
 
 /* ── VIEWER FOTO ── */
 function openPhotoViewer(clienteId,tratId,idx){
-  const c=state.clientes.find(x=>x.id===clienteId);
-  const t=(c?.tratamientos||[]).find(x=>x.id===tratId);
+  const tratas=state.tratCache[clienteId]||[];
+  const t=tratas.find(x=>x.id===tratId);
   if(!t?.fotos) return;
   const overlay=document.createElement("div");
   overlay.style.cssText="position:fixed;inset:0;background:#000;z-index:999;display:flex;align-items:center;justify-content:center;";
@@ -631,8 +718,9 @@ function formatDate(d){
 }
 
 /* ── INIT ── */
-loadState();
+loadLocalState();
 render();
+if(state.authed) loadClientes();
 </script>
 </body>
 </html>
