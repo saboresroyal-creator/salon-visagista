@@ -1118,6 +1118,97 @@ function enviarNotifCustom(){
    MÓDULO STOCK
    ══════════════════════════════════════════════ */
 
+// ── CATÁLOGO PRECARGADO KÉRASTASE ────────────────
+const KERASTASE_CATALOGO=[
+  // SHAMPOOS
+  {codigo:'3474636612666',nombre:'Résistance Bain Extentioniste 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474636403912',nombre:'Densifique Bain Densite 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474636968688',nombre:'Curl Manifesto Bain Hydratation 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474636692170',nombre:'Blond Absolu Bain Lumiere 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474636692231',nombre:'Blond Absolu Bain Ultra Violet 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474636614103',nombre:'Elixir Ultime Le Bain 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'843711250575', nombre:'Discipline Bain Fluidealiste 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'843711253132', nombre:'Nutritive Bain Satin 1 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'843711253149', nombre:'Nutritive Bain Satin 2 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474637154912',nombre:'Nutritive Bain Satin Riche Cabello Fino 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474637154936',nombre:'Nutritive Bain Satin Riche Cabello Grueso 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474636591084',nombre:'Aura Botanica Bain Micellaire Riche 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474637059002',nombre:'Chroma Absolu Bain Cabello Medio/Grueso 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474636954766',nombre:'Specifique Bain Divalent 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474637077518',nombre:'Genesis Homme Bain Densificante 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474637077525',nombre:'Genesis Homme Bain Fortalecedor 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474630545564',nombre:'Résistance Bain Volumifique 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474630478244',nombre:'Elixir K Ultime Bain Sublime 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474630096790',nombre:'Nutritive Bain Oleo-Curl 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474636382651',nombre:'Nutritive Bain Oleo-Relax 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'843711253101',nombre:'Nutritive Bain Magistral 250ml',categoria:'Shampoo',unidad:'unid'},
+  {codigo:'3474630288072',nombre:'Homme Capital Force Shampoo 250ml',categoria:'Shampoo',unidad:'unid'},
+  // ACONDICIONADORES
+  {codigo:'3474636612918',nombre:'Résistance Fondant Extentioniste 200ml',categoria:'Acondicionador',unidad:'unid'},
+  {codigo:'3474636968787',nombre:'Curl Manifesto Fondant Hydratation 200ml',categoria:'Acondicionador',unidad:'unid'},
+  {codigo:'3474636692361',nombre:'Blond Absolu Cicaflash Conditioner 250ml',categoria:'Acondicionador',unidad:'unid'},
+  {codigo:'3474636614028',nombre:'Elixir Ultime Fondant 200ml',categoria:'Acondicionador',unidad:'unid'},
+  {codigo:'843711250605', nombre:'Discipline Fondant Fluidealiste 200ml',categoria:'Acondicionador',unidad:'unid'},
+  {codigo:'843711253170', nombre:'Nutritive Lait Vital 200ml',categoria:'Acondicionador',unidad:'unid'},
+  {codigo:'3474636857883',nombre:'Genesis Fondant Renforcateur 200ml',categoria:'Acondicionador',unidad:'unid'},
+  {codigo:'3474630314016',nombre:'Nutritive Fondant Nutri-Thermique 200ml',categoria:'Acondicionador',unidad:'unid'},
+  {codigo:'3474637154981',nombre:'Nutritive Hydrating Conditioner 200ml',categoria:'Acondicionador',unidad:'unid'},
+  {codigo:'3474637059187',nombre:'Chroma Absolu Fondant Cica Chroma 200ml',categoria:'Acondicionador',unidad:'unid'},
+  {codigo:'3474636382446',nombre:'Nutritive Fondant Magistral 200ml',categoria:'Acondicionador',unidad:'unid'},
+  {codigo:'3474636382699',nombre:'Nutritive Lait Vital 200ml (alt)',categoria:'Acondicionador',unidad:'unid'},
+  {codigo:'3474636356058',nombre:'Densifique Fondant Densite 200ml',categoria:'Acondicionador',unidad:'unid'},
+  // MASCARILLAS Y TRATAMIENTOS
+  {codigo:'3474630382183',nombre:'Résistance Masque Force Architecte 200ml',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474630565395',nombre:'Nutritive Masquintense Cabello Fino 200ml',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474630565623',nombre:'Nutritive Masquintense Cabello Grueso 200ml',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474630654990',nombre:'Discipline Maskeratine 200ml',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474636403936',nombre:'Densifique Masque Densite 200ml',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474630477056',nombre:'Elixir Ultime Masque 200ml',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474630382312',nombre:'Résistance Ciment Anti-Usure 200ml',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474630264144',nombre:'Age Premium Masque Rejuvenecedor 200ml',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474630097001',nombre:'Nutritive Oleo Relax Masque 200ml',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474636857975',nombre:'Genesis Defense Thermique Masque',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474630647374',nombre:'Kératine Thermique 150ml',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474630652439',nombre:'Résistance Ciment Thermique 150ml',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474630493421',nombre:'Initialiste Sérum Concentrado 60ml',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474630376854',nombre:'Fusio-Dose Concentré Vita Ciment',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474630376793',nombre:'Fusio-Dose Concentré Oleo-Fusion',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474630255746',nombre:'Chronologiste Concentré Vital Renovateur',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474635004905',nombre:'Nutritive Aqua-Oleum Tratamiento',categoria:'Crema / Tratamiento',unidad:'unid'},
+  {codigo:'3474630247888',nombre:'Nutritive Oleo-Relax Slim Masque 500ml',categoria:'Crema / Tratamiento',unidad:'unid'},
+  // ACEITES Y STYLING
+  {codigo:'3474630476912',nombre:'Elixir Ultime Oleo-Complex Aceite 125ml',categoria:'Otro',unidad:'unid'},
+  {codigo:'3474630476981',nombre:'Elixir Ultime Rose Millenaire Aceite 125ml',categoria:'Otro',unidad:'unid'},
+  {codigo:'3474636349913',nombre:'Discipline Oleo-Curl Leave In 150ml',categoria:'Otro',unidad:'unid'},
+  {codigo:'3474636512904',nombre:'L\'incroyable Blowdry Crème 150ml',categoria:'Otro',unidad:'unid'},
+  {codigo:'3474636495016',nombre:'Reflection Touche Chromatique Cuivre 10ml',categoria:'Otro',unidad:'unid'},
+  {codigo:'3474636495047',nombre:'Reflection Touche Chromatique Rojo 10ml',categoria:'Otro',unidad:'unid'},
+  {codigo:'3474636494996',nombre:'Reflection Touche Chromatique Castaño Frío 10ml',categoria:'Otro',unidad:'unid'},
+];
+
+function precargarKerastase(){
+  let nuevos=0;
+  KERASTASE_CATALOGO.forEach(item=>{
+    const yaExiste=state.stockProductos.find(p=>p.codigo===item.codigo);
+    if(yaExiste) return;
+    state.stockProductos.push({
+      id:'p'+Date.now()+Math.random().toString(36).slice(2),
+      codigo:item.codigo,
+      nombre:item.nombre,
+      marca:'Kérastase',
+      categoria:item.categoria,
+      stockActual:0,
+      stockMinimo:1,
+      unidad:item.unidad,
+      ultimoUpdate:new Date().toISOString(),
+    });
+    nuevos++;
+  });
+  saveStock();
+  render();
+  toast(nuevos>0?`${nuevos} productos Kérastase agregados`:'El catálogo Kérastase ya estaba cargado');
+}
+
 function loadStock(){
   try{
     state.stockProductos = JSON.parse(localStorage.getItem('vs_stock_prods')||'[]');
@@ -1164,6 +1255,12 @@ function renderStock(){
     <div class="stock-stat"><div class="stock-stat-num">${prods.length}</div><div class="stock-stat-lbl">Productos</div></div>
     <div class="stock-stat"><div class="stock-stat-num" style="color:var(--danger)">${sinStock}</div><div class="stock-stat-lbl">Sin stock</div></div>
     <div class="stock-stat"><div class="stock-stat-num" style="color:#e6a817">${bajoStock}</div><div class="stock-stat-lbl">Stock bajo</div></div>
+  </div>`;
+
+  html+=`<div style="margin:0 20px 4px;text-align:right;">
+    <button onclick="precargarKerastase()" style="background:transparent;border:1px solid rgba(201,169,110,0.35);color:var(--gold);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;padding:6px 12px;cursor:pointer;">
+      + Importar catálogo Kérastase
+    </button>
   </div>`;
 
   if(prods.length===0){
@@ -1376,7 +1473,7 @@ function confirmarMovimiento(productoId, tipo){
   nav('stock-detalle',{id:productoId});
 }
 
-// ── ESCÁNER (Quagga2) ────────────────────────
+// ── ESCÁNER ────────────────────────
 
 function abrirScanner(){
   document.getElementById('scanner-overlay')?.remove();
@@ -1385,9 +1482,9 @@ function abrirScanner(){
   const st = document.createElement('style');
   st.id = '_scan-style';
   st.textContent = `
-    @keyframes scanBeam{0%{top:4px}50%{top:calc(100% - 6px)}100%{top:4px}}
-    #scan-container video{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;object-fit:cover!important;border:none!important;}
-    #scan-container canvas.drawingBuffer{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;opacity:.35;}
+    @keyframes scanBeam{0%{top:8px}50%{top:calc(100% - 10px)}100%{top:8px}}
+    #scan-container video{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;object-fit:cover!important;}
+    #scan-container canvas{display:none!important;}
   `;
   document.head.appendChild(st);
 
@@ -1395,17 +1492,12 @@ function abrirScanner(){
   ov.id = 'scanner-overlay';
   ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:#000;display:flex;flex-direction:column;';
   ov.innerHTML = `
-    <!-- Quagga renderiza video+canvas acá -->
     <div id="scan-container" style="flex:1;position:relative;overflow:hidden;background:#000;"></div>
-
-    <!-- UI encima de la cámara -->
     <div style="position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;">
-      <!-- topbar -->
       <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:linear-gradient(rgba(0,0,0,.75),transparent);pointer-events:auto;">
         <span style="color:var(--gold);font-size:10px;letter-spacing:3px;text-transform:uppercase;">Escanear código</span>
         <span onclick="cerrarScanner()" style="color:#fff;font-size:28px;line-height:1;cursor:pointer;padding:2px 8px;">✕</span>
       </div>
-      <!-- recuadro central -->
       <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">
         <div style="position:relative;width:290px;height:130px;border:2px solid var(--gold);">
           <div style="position:absolute;top:-3px;left:-3px;width:24px;height:24px;border-top:3px solid var(--gold2);border-left:3px solid var(--gold2);"></div>
@@ -1416,17 +1508,62 @@ function abrirScanner(){
         </div>
         <div style="color:rgba(255,255,255,.5);font-size:11px;letter-spacing:1px;margin-top:14px;text-align:center;">Apuntá el código de barras al recuadro</div>
       </div>
-      <!-- input manual al pie -->
       <div style="pointer-events:auto;background:rgba(0,0,0,.92);padding:12px 16px;display:flex;gap:8px;border-top:1px solid rgba(255,255,255,.06);">
         <input id="scan-input" type="text" inputmode="numeric" placeholder="O escribí el código acá"
-          style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);color:#fff;padding:12px 14px;font-size:14px;font-family:'Montserrat',sans-serif;">
+          style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);color:#fff;padding:12px 14px;font-size:14px;font-family:'Montserrat',sans-serif;outline:none;">
         <button onclick="usarCodigoManual()"
           style="background:var(--gold);color:var(--black);border:none;padding:12px 18px;font-weight:700;font-size:11px;cursor:pointer;">OK</button>
       </div>
     </div>`;
   document.body.appendChild(ov);
 
-  // Cargar Quagga2 e iniciar
+  // BarcodeDetector nativo (Chrome Android 83+, Safari 17.4+) → más confiable
+  if('BarcodeDetector' in window){
+    iniciarNativo();
+  } else {
+    cargarQuagga();
+  }
+}
+
+async function iniciarNativo(){
+  const container = document.getElementById('scan-container');
+  if(!container) return;
+  const video = document.createElement('video');
+  video.autoplay = true; video.playsInline = true; video.muted = true;
+  video.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;';
+  container.appendChild(video);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:'environment', width:{ideal:1280}, height:{ideal:720} }
+    });
+    state.scannerStream = stream;
+    video.srcObject = stream;
+    await video.play();
+    const detector = new BarcodeDetector({
+      formats:['ean_13','ean_8','code_128','upc_a','upc_e','code_39']
+    });
+    let active = true;
+    const loop = async () => {
+      if(!active || !document.getElementById('scanner-overlay')) return;
+      try {
+        const results = await detector.detect(video);
+        if(results.length > 0){
+          active = false;
+          if(navigator.vibrate) navigator.vibrate([80]);
+          cerrarScanner();
+          procesarCodigo(results[0].rawValue);
+          return;
+        }
+      } catch(e){}
+      setTimeout(loop, 250);
+    };
+    setTimeout(loop, 600); // esperar que el video estabilice
+  } catch(e){
+    toast('No se pudo acceder a la cámara');
+  }
+}
+
+function cargarQuagga(){
   if(window.Quagga){ iniciarQuagga(); return; }
   const s = document.createElement('script');
   s.src = 'https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js';
@@ -1438,55 +1575,37 @@ function abrirScanner(){
 function iniciarQuagga(){
   const container = document.getElementById('scan-container');
   if(!container) return;
-
-  Quagga.init({
-    inputStream:{
-      name:'Live',
-      type:'LiveStream',
-      target: container,
-      constraints:{
-        facingMode:'environment',
-        width:{min:640, ideal:1280},
-        height:{min:480, ideal:720},
+  setTimeout(() => {
+    Quagga.init({
+      inputStream:{
+        name:'Live', type:'LiveStream', target:container,
+        constraints:{ facingMode:'environment' },
       },
-    },
-    locator:{ patchSize:'medium', halfSample:true },
-    numOfWorkers: navigator.hardwareConcurrency || 2,
-    frequency: 10,
-    decoder:{
-      readers:[
-        'ean_reader',
-        'ean_8_reader',
-        'code_128_reader',
-        'upc_reader',
-        'upc_e_reader',
-        'code_39_reader',
-      ],
-      multiple: false,
-    },
-    locate: true,
-  }, err=>{
-    if(err){ toast('No se pudo acceder a la cámara'); return; }
-    Quagga.start();
-  });
-
-  let lastCode = '', lastTime = 0;
-  Quagga.onDetected(result=>{
-    const code = result?.codeResult?.code;
-    if(!code) return;
-    // Evitar lecturas duplicadas en menos de 1.5s
-    const now = Date.now();
-    if(code === lastCode && now - lastTime < 1500) return;
-    lastCode = code; lastTime = now;
-
-    if(navigator.vibrate) navigator.vibrate([80]);
-    cerrarScanner();
-    procesarCodigo(code);
-  });
+      numOfWorkers: 0,
+      frequency: 5,
+      decoder:{
+        readers:['ean_reader','ean_8_reader','code_128_reader','upc_reader'],
+        multiple: false,
+      },
+      locate: true,
+      locator:{ patchSize:'medium', halfSample:false },
+    }, err=>{
+      if(err){ toast('No se pudo acceder a la cámara'); return; }
+      Quagga.start();
+    });
+    Quagga.onDetected(result=>{
+      const code = result?.codeResult?.code;
+      if(!code) return;
+      if(navigator.vibrate) navigator.vibrate([80]);
+      cerrarScanner();
+      procesarCodigo(code);
+    });
+  }, 300);
 }
 
 function cerrarScanner(){
   try{ if(window.Quagga) Quagga.stop(); }catch(e){}
+  if(state.scannerStream){ state.scannerStream.getTracks().forEach(t=>t.stop()); state.scannerStream=null; }
   document.getElementById('scanner-overlay')?.remove();
   document.getElementById('_scan-style')?.remove();
 }
