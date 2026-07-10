@@ -1370,84 +1370,139 @@ function confirmarMovimiento(productoId, tipo){
   nav('stock-detalle',{id:productoId});
 }
 
-// ── ESCÁNER (html5-qrcode — ZXing) ───────────
-let _qrScanner = null;
+// ── ESCÁNER ──────────────────────────────────
 
 function abrirScanner(){
-  const overlay = document.createElement('div');
-  overlay.className='scanner-overlay'; overlay.id='scanner-overlay';
-  overlay.innerHTML=`
-    <div class="scanner-topbar">
-      <div style="color:var(--gold);font-size:11px;letter-spacing:3px;text-transform:uppercase;">Escanear código</div>
-      <div class="scanner-close" onclick="cerrarScanner()">✕</div>
+  document.getElementById('scanner-overlay')?.remove();
+  document.getElementById('_scan-style')?.remove();
+
+  // Animación de la línea de barrido
+  const st = document.createElement('style');
+  st.id = '_scan-style';
+  st.textContent = '@keyframes scanBeam{0%{top:4px}50%{top:calc(100% - 6px)}100%{top:4px}}';
+  document.head.appendChild(st);
+
+  const ov = document.createElement('div');
+  ov.id = 'scanner-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:#000;display:flex;flex-direction:column;';
+  ov.innerHTML = `
+    <div style="position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:linear-gradient(rgba(0,0,0,.7),transparent);">
+      <span style="color:var(--gold);font-size:10px;letter-spacing:3px;text-transform:uppercase;">Escanear código</span>
+      <span onclick="cerrarScanner()" style="color:#fff;font-size:26px;line-height:1;cursor:pointer;padding:2px 6px;">✕</span>
     </div>
-    <div style="flex:1;overflow:hidden;min-height:0;">
-      <div id="qr-reader" style="width:100%;height:100%;"></div>
-    </div>
-    <div style="background:rgba(0,0,0,0.85);padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08);">
-      <div style="font-size:10px;color:var(--gray);letter-spacing:1px;text-align:center;margin-bottom:8px;">O ingresá el código manualmente</div>
-      <div style="display:flex;gap:8px;">
-        <input id="scanner-input" type="text" inputmode="numeric" style="flex:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:11px 12px;font-size:15px;letter-spacing:2px;" placeholder="Código">
-        <button onclick="usarCodigoManual()" style="background:var(--gold);color:var(--black);border:none;padding:11px 16px;font-weight:700;font-size:11px;letter-spacing:1px;cursor:pointer;white-space:nowrap;">OK</button>
+
+    <!-- Video de cámara -->
+    <video id="scan-video" autoplay playsinline muted
+      style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"></video>
+
+    <!-- Overlay oscuro con recuadro transparente -->
+    <div style="position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+      <!-- sombra superior -->
+      <div style="width:100%;flex:1;background:rgba(0,0,0,.55);"></div>
+      <!-- fila del recuadro -->
+      <div style="width:100%;display:flex;align-items:stretch;height:140px;">
+        <div style="flex:1;background:rgba(0,0,0,.55);"></div>
+        <!-- recuadro dorado -->
+        <div style="width:290px;position:relative;border:2px solid var(--gold);">
+          <!-- esquinas brillantes -->
+          <div style="position:absolute;top:-3px;left:-3px;width:22px;height:22px;border-top:3px solid var(--gold2);border-left:3px solid var(--gold2);"></div>
+          <div style="position:absolute;top:-3px;right:-3px;width:22px;height:22px;border-top:3px solid var(--gold2);border-right:3px solid var(--gold2);"></div>
+          <div style="position:absolute;bottom:-3px;left:-3px;width:22px;height:22px;border-bottom:3px solid var(--gold2);border-left:3px solid var(--gold2);"></div>
+          <div style="position:absolute;bottom:-3px;right:-3px;width:22px;height:22px;border-bottom:3px solid var(--gold2);border-right:3px solid var(--gold2);"></div>
+          <!-- línea de barrido -->
+          <div style="position:absolute;left:4px;right:4px;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);animation:scanBeam 1.8s ease-in-out infinite;opacity:.9;"></div>
+        </div>
+        <div style="flex:1;background:rgba(0,0,0,.55);"></div>
       </div>
+      <!-- sombra inferior + hint -->
+      <div style="width:100%;flex:1;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding-top:16px;">
+        <span style="color:rgba(255,255,255,.55);font-size:11px;letter-spacing:1px;">Apuntá el código al recuadro</span>
+      </div>
+    </div>
+
+    <!-- Input manual -->
+    <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.9);padding:12px 16px;display:flex;gap:8px;border-top:1px solid rgba(255,255,255,.07);">
+      <input id="scan-input" type="text" inputmode="numeric" placeholder="O ingresá el código a mano"
+        style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);color:#fff;padding:12px 14px;font-size:14px;font-family:'Montserrat',sans-serif;border-radius:0;">
+      <button onclick="usarCodigoManual()"
+        style="background:var(--gold);color:var(--black);border:none;padding:12px 18px;font-weight:700;font-size:11px;letter-spacing:1px;cursor:pointer;">OK</button>
     </div>`;
-  document.body.appendChild(overlay);
-  cargarLibScanner();
+  document.body.appendChild(ov);
+  iniciarVideoScan();
 }
 
-function cargarLibScanner(){
-  if(window.Html5Qrcode){ iniciarQrScanner(); return; }
-  const s = document.createElement('script');
-  s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
-  s.onload = iniciarQrScanner;
-  s.onerror = () => toast('No se pudo cargar el escáner — ingresá el código manualmente');
-  document.head.appendChild(s);
-}
-
-function iniciarQrScanner(){
-  if(!document.getElementById('qr-reader')) return;
+async function iniciarVideoScan(){
   try{
-    // Especificar todos los formatos de código de barras explícitamente
-    const formatos = [
-      Html5QrcodeSupportedFormats.QR_CODE,
-      Html5QrcodeSupportedFormats.EAN_13,
-      Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.CODE_39,
-      Html5QrcodeSupportedFormats.UPC_A,
-      Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.ITF,
-      Html5QrcodeSupportedFormats.CODABAR,
-      Html5QrcodeSupportedFormats.DATA_MATRIX,
-    ];
-    _qrScanner = new Html5Qrcode('qr-reader', {formatsToSupport: formatos, verbose: false});
-    _qrScanner.start(
-      {facingMode: 'environment'},
-      {
-        fps: 15,
-        // Caja ancha y baja, ideal para códigos de barras horizontales
-        qrbox: (w, h) => ({width: Math.min(w - 32, 320), height: Math.round(Math.min(w - 32, 320) * 0.4)}),
-        aspectRatio: window.innerHeight / window.innerWidth,
-      },
-      (codigo) => {
-        if(navigator.vibrate) navigator.vibrate([80]);
-        cerrarScanner();
-        procesarCodigo(codigo);
-      },
-      () => {} // errores por frame son normales, ignorar
-    ).catch(() => toast('Sin permiso de cámara — ingresá el código manualmente'));
-  } catch(e){ toast('No se pudo iniciar el escáner'); }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'environment', width:{ideal:1920}, height:{ideal:1080}}
+    });
+    state.scannerStream = stream;
+    const video = document.getElementById('scan-video');
+    if(!video){ cerrarScanner(); return; }
+    video.srcObject = stream;
+    await video.play();
+
+    if('BarcodeDetector' in window){
+      // Chrome Android / Safari 17.4+ — detección nativa, muy rápida
+      const det = new BarcodeDetector({
+        formats:['ean_13','ean_8','qr_code','code_128','code_39','upc_a','upc_e','itf','codabar','data_matrix']
+      });
+      state.scannerTimer = setInterval(async()=>{
+        if(!document.getElementById('scan-video')){ clearInterval(state.scannerTimer); return; }
+        try{
+          const found = await det.detect(video);
+          if(found.length){
+            if(navigator.vibrate) navigator.vibrate([60]);
+            const code = found[0].rawValue;
+            cerrarScanner();
+            procesarCodigo(code);
+          }
+        }catch(e){}
+      }, 200);
+    } else {
+      // Fallback ZXing via html5-qrcode (otros browsers)
+      const cargar = () => new Promise((res,rej)=>{
+        if(window.Html5Qrcode){ res(); return; }
+        const s = document.createElement('script');
+        s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+        s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+      await cargar().catch(()=>{});
+      if(!window.Html5Qrcode) return;
+
+      // Capturar frames del video con canvas y pasarlos a ZXing
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      state.scannerTimer = setInterval(()=>{
+        if(!document.getElementById('scan-video')){ clearInterval(state.scannerTimer); return; }
+        if(video.readyState < 2) return;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+        canvas.toBlob(blob=>{
+          if(!blob) return;
+          const file = new File([blob],'f.jpg',{type:'image/jpeg'});
+          Html5Qrcode.scanFile(file, false)
+            .then(code=>{ if(navigator.vibrate) navigator.vibrate([60]); cerrarScanner(); procesarCodigo(code); })
+            .catch(()=>{});
+        },'image/jpeg', 0.85);
+      }, 350);
+    }
+  }catch(e){
+    toast('Sin permiso de cámara — ingresá el código manualmente');
+  }
 }
 
 function cerrarScanner(){
-  if(_qrScanner){
-    _qrScanner.stop().catch(()=>{}).finally(()=>{ try{_qrScanner.clear();}catch(e){} _qrScanner=null; });
-  }
-  const el=document.getElementById('scanner-overlay'); if(el) el.remove();
+  if(state.scannerTimer){ clearInterval(state.scannerTimer); state.scannerTimer=null; }
+  if(state.scannerStream){ state.scannerStream.getTracks().forEach(t=>t.stop()); state.scannerStream=null; }
+  document.getElementById('scanner-overlay')?.remove();
+  document.getElementById('_scan-style')?.remove();
 }
 
 function usarCodigoManual(){
-  const val=(document.getElementById('scanner-input').value||'').trim();
+  const val=(document.getElementById('scan-input').value||'').trim();
   if(!val){ toast('Ingresá un código'); return; }
   cerrarScanner();
   procesarCodigo(val);
