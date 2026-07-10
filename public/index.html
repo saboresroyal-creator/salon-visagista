@@ -224,6 +224,12 @@ textarea.form-input:focus{border-color:var(--gold);}
 .scanner-close{color:#fff;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:22px;}
 .scanner-viewport{flex:1;position:relative;}
 .scanner-viewport video{width:100%;height:100%;object-fit:cover;}
+#qr-reader video{width:100%!important;height:100%!important;object-fit:cover!important;}
+#qr-reader{border:none!important;padding:0!important;}
+#qr-reader__scan_region{background:transparent!important;}
+#qr-reader__scan_region img{display:none!important;}
+#qr-reader__dashboard{display:none!important;}
+#qr-reader__status_span{display:none!important;}
 .scanner-frame{position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:260px;height:150px;border:2px solid var(--gold);box-shadow:0 0 0 9999px rgba(0,0,0,0.55);}
 .scanner-corner{position:absolute;width:22px;height:22px;border-color:var(--gold2);border-style:solid;}
 .scanner-corner.tl{top:-3px;left:-3px;border-width:3px 0 0 3px;}
@@ -1365,7 +1371,9 @@ function confirmarMovimiento(productoId, tipo){
   nav('stock-detalle',{id:productoId});
 }
 
-// ── ESCÁNER ──────────────────────────────────
+// ── ESCÁNER (html5-qrcode — ZXing) ───────────
+let _qrScanner = null;
+
 function abrirScanner(){
   const overlay = document.createElement('div');
   overlay.className='scanner-overlay'; overlay.id='scanner-overlay';
@@ -1374,54 +1382,57 @@ function abrirScanner(){
       <div style="color:var(--gold);font-size:11px;letter-spacing:3px;text-transform:uppercase;">Escanear código</div>
       <div class="scanner-close" onclick="cerrarScanner()">✕</div>
     </div>
-    <div class="scanner-viewport">
-      <video id="scanner-video" autoplay playsinline muted></video>
-      <div class="scanner-frame">
-        <div class="scanner-corner tl"></div>
-        <div class="scanner-corner tr"></div>
-        <div class="scanner-corner bl"></div>
-        <div class="scanner-corner br"></div>
-      </div>
-      <div class="scanner-hint">Apuntá al código de barras o QR</div>
+    <div style="flex:1;position:relative;overflow:hidden;">
+      <div id="qr-reader" style="width:100%;height:100%;"></div>
+      <div style="position:absolute;bottom:16px;left:0;right:0;text-align:center;color:rgba(255,255,255,0.55);font-size:11px;letter-spacing:1px;pointer-events:none;" id="scanner-hint">Apuntá al código de barras o QR</div>
     </div>
     <div class="scanner-manual">
-      <input id="scanner-input" type="text" inputmode="numeric" class="scanner-manual input" placeholder="O escribí el código manualmente">
+      <input id="scanner-input" type="text" inputmode="numeric" placeholder="O escribí el código manualmente">
       <button class="scanner-manual-btn" onclick="usarCodigoManual()">Usar este código</button>
     </div>`;
   document.body.appendChild(overlay);
-  iniciarCamara();
+  cargarLibScanner();
 }
 
-async function iniciarCamara(){
-  try{
-    const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
-    state.scannerStream = stream;
-    const video = document.getElementById('scanner-video');
-    if(!video){ cerrarScanner(); return; }
-    video.srcObject = stream;
-    await video.play();
+function cargarLibScanner(){
+  if(window.Html5Qrcode){ iniciarQrScanner(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+  s.onload = iniciarQrScanner;
+  s.onerror = () => {
+    const h=document.getElementById('scanner-hint');
+    if(h) h.textContent='Sin conexión — ingresá el código manualmente';
+  };
+  document.head.appendChild(s);
+}
 
-    if('BarcodeDetector' in window){
-      const detector = new BarcodeDetector({formats:['ean_13','ean_8','qr_code','code_128','code_39','upc_a','upc_e','itf']});
-      state.scannerTimer = setInterval(async()=>{
-        if(!document.getElementById('scanner-video')) return clearInterval(state.scannerTimer);
-        try{
-          const codes = await detector.detect(video);
-          if(codes.length>0){ cerrarScanner(); procesarCodigo(codes[0].rawValue); }
-        }catch(e){}
-      }, 400);
-    } else {
-      const hint = overlay && overlay.querySelector('.scanner-hint');
-      if(hint) hint.textContent='Cámara activa — escribí el código manualmente';
-    }
-  }catch(e){
-    toast('No se pudo acceder a la cámara — ingresá el código manualmente');
-  }
+function iniciarQrScanner(){
+  const div = document.getElementById('qr-reader');
+  if(!div) return;
+  try{
+    _qrScanner = new Html5Qrcode('qr-reader');
+    _qrScanner.start(
+      {facingMode:'environment'},
+      {fps:12, qrbox:(w,h)=>({width:Math.min(w-40,280), height:120}), aspectRatio:1.77},
+      (codigo)=>{ cerrarScanner(); procesarCodigo(codigo); },
+      ()=>{}
+    ).catch(()=>{
+      const h=document.getElementById('scanner-hint');
+      if(h) h.textContent='Sin permiso de cámara — ingresá el código manualmente';
+    });
+    // Ocultar UI interna de html5-qrcode que no necesitamos
+    setTimeout(()=>{
+      ['#qr-reader__dashboard','#qr-reader__status_span','#qr-reader__header_message'].forEach(sel=>{
+        const el=document.querySelector(sel); if(el) el.style.display='none';
+      });
+    }, 600);
+  }catch(e){ toast('No se pudo iniciar el escáner'); }
 }
 
 function cerrarScanner(){
-  if(state.scannerTimer){ clearInterval(state.scannerTimer); state.scannerTimer=null; }
-  if(state.scannerStream){ state.scannerStream.getTracks().forEach(t=>t.stop()); state.scannerStream=null; }
+  if(_qrScanner){
+    _qrScanner.stop().catch(()=>{}).finally(()=>{ try{_qrScanner.clear();}catch(e){} _qrScanner=null; });
+  }
   const el=document.getElementById('scanner-overlay'); if(el) el.remove();
 }
 
