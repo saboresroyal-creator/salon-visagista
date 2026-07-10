@@ -191,6 +191,68 @@ textarea.form-input:focus{border-color:var(--gold);}
 ::-webkit-scrollbar{width:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--glass-bd);}
+
+/* ── STOCK ── */
+.stock-summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;margin:16px 20px;}
+.stock-stat{background:var(--glass);border:1px solid var(--glass-bd);padding:16px 10px;text-align:center;}
+.stock-stat-num{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:300;color:var(--gold);}
+.stock-stat-lbl{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--gray);margin-top:3px;}
+.stock-cat-title{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);padding:20px 20px 6px;opacity:.7;}
+.stock-item{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;transition:.15s;}
+.stock-item:active{background:var(--glass);}
+.stock-item-left{flex:1;}
+.stock-item-name{font-family:'Cormorant Garamond',serif;font-size:19px;font-weight:400;}
+.stock-item-brand{font-size:10px;color:var(--gray);margin-top:2px;letter-spacing:.3px;}
+.stock-badge{padding:4px 12px;font-size:11px;font-weight:600;border-radius:20px;white-space:nowrap;}
+.stock-badge.ok{background:rgba(46,125,79,0.2);color:#5cb85c;border:1px solid rgba(92,184,92,0.25);}
+.stock-badge.low{background:rgba(215,153,33,0.18);color:#e6a817;border:1px solid rgba(230,168,23,0.25);}
+.stock-badge.out{background:rgba(192,57,43,0.18);color:#e74c3c;border:1px solid rgba(231,76,60,0.25);}
+.stock-fab{position:fixed;bottom:88px;right:20px;width:54px;height:54px;background:var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 20px rgba(201,169,110,0.4);z-index:80;border:none;}
+.stock-fab svg{width:24px;height:24px;color:var(--black);}
+.stock-mov-btn{flex:1;padding:16px;border:none;font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;cursor:pointer;}
+.stock-mov-btn.entrada{background:var(--success);color:#fff;}
+.stock-mov-btn.salida{background:var(--danger);color:#fff;}
+.mov-list-item{padding:14px 20px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between;}
+.mov-tipo{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;padding:3px 8px;border-radius:10px;}
+.mov-tipo.entrada{background:rgba(46,125,79,0.2);color:#5cb85c;}
+.mov-tipo.salida{background:rgba(192,57,43,0.18);color:#e74c3c;}
+.mov-qty{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:300;}
+.mov-meta{font-size:10px;color:var(--gray);margin-top:2px;}
+/* Scanner */
+.scanner-overlay{position:fixed;inset:0;background:#000;z-index:200;display:flex;flex-direction:column;}
+.scanner-topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:rgba(0,0,0,0.7);position:absolute;top:0;left:0;right:0;z-index:201;}
+.scanner-close{color:#fff;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:22px;}
+.scanner-viewport{flex:1;position:relative;}
+.scanner-viewport video{width:100%;height:100%;object-fit:cover;}
+.scanner-frame{position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:260px;height:150px;border:2px solid var(--gold);box-shadow:0 0 0 9999px rgba(0,0,0,0.55);}
+.scanner-corner{position:absolute;width:22px;height:22px;border-color:var(--gold2);border-style:solid;}
+.scanner-corner.tl{top:-3px;left:-3px;border-width:3px 0 0 3px;}
+.scanner-corner.tr{top:-3px;right:-3px;border-width:3px 3px 0 0;}
+.scanner-corner.bl{bottom:-3px;left:-3px;border-width:0 0 3px 3px;}
+.scanner-corner.br{bottom:-3px;right:-3px;border-width:0 3px 3px 0;}
+.scanner-hint{position:absolute;top:calc(50% + 20px);left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.6);font-size:11px;letter-spacing:1px;text-align:center;width:240px;}
+.scanner-manual{position:absolute;bottom:100px;left:20px;right:20px;}
+.scanner-manual input{width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.25);color:#fff;padding:13px 16px;font-size:16px;text-align:center;letter-spacing:3px;border-radius:0;}
+.scanner-manual-btn{width:100%;background:var(--gold);color:var(--black);padding:13px;font-weight:700;font-size:12px;letter-spacing:2px;margin-top:8px;cursor:pointer;border:none;text-transform:uppercase;}
+/* Modal */
+.qty-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:150;display:flex;align-items:flex-end;}
+.qty-sheet{background:var(--black2);width:100%;padding:28px 24px 44px;border-top:1px solid var(--glass-bd);}
+.qty-sheet h3{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:400;margin-bottom:6px;}
+.qty-sheet .sub{font-size:11px;color:var(--gray);letter-spacing:.5px;margin-bottom:24px;}
+.qty-row{display:flex;align-items:center;justify-content:center;gap:24px;margin-bottom:20px;}
+.qty-btn{width:44px;height:44px;background:var(--glass);border:1px solid var(--glass-bd);color:var(--white);font-size:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:0;line-height:1;}
+.qty-num{font-family:'Cormorant Garamond',serif;font-size:52px;font-weight:300;min-width:80px;text-align:center;line-height:1;}
+.qty-nota{width:100%;background:var(--glass);border:1px solid var(--glass-bd);color:var(--white);padding:12px 14px;font-size:13px;margin-bottom:16px;font-family:'Montserrat',sans-serif;}
+/* Form */
+.stock-form{padding:20px;}
+.sform-group{margin-bottom:18px;}
+.sform-label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px;display:block;}
+.sform-input{width:100%;background:var(--glass);border:1px solid var(--glass-bd);color:var(--white);padding:13px 14px;font-size:14px;font-family:'Montserrat',sans-serif;border-radius:0;}
+.sform-input:focus{outline:none;border-color:var(--gold);}
+.sform-select{width:100%;background:var(--black3);border:1px solid var(--glass-bd);color:var(--white);padding:13px 14px;font-size:14px;font-family:'Montserrat',sans-serif;border-radius:0;appearance:none;}
+.sform-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.sform-btn{width:100%;padding:16px;border:none;font-size:12px;font-weight:600;letter-spacing:2px;text-transform:uppercase;cursor:pointer;background:var(--gold);color:var(--black);margin-top:8px;}
+.sform-hint{font-size:10px;color:var(--gray);margin-top:4px;letter-spacing:.3px;}
 </style>
 </head>
 <body>
@@ -237,6 +299,13 @@ let state = {
   loading: false,
   pendientes: [],
   pendienteMsgs: {},
+  stockProductos: [],
+  stockMovimientos: [],
+  stockQty: 1,
+  stockNota: "",
+  scannerStream: null,
+  scannerTimer: null,
+  stockFormPrefill: null,
 };
 
 function loadLocalState(){ try{ if(localStorage.getItem("vs_auth")==="1") state.authed=true; }catch(e){} }
@@ -303,6 +372,8 @@ function ic(name){
     wa:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.139.564 4.147 1.542 5.888L0 24l6.306-1.524A11.955 11.955 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.891 0-3.658-.523-5.168-1.432L3 21.5l.96-3.729A9.964 9.964 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>',
     search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
     logout:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+    stock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="5" rx="1"/><rect x="2" y="10" width="20" height="5" rx="1"/><rect x="2" y="17" width="20" height="5" rx="1"/></svg>',
+    scan:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>',
   };
   return icons[name]||'';
 }
@@ -335,6 +406,9 @@ function render(){
   else if(s==="cliente-detail")   content = renderClienteDetail(state.route.id);
   else if(s==="tratamiento-detail") content = renderTratamientoDetail(state.route.clienteId, state.route.tratId);
   else if(s==="nuevo-tratamiento") content = renderNuevoTratamiento(state.route.clienteId);
+  else if(s==="stock")            content = renderStock();
+  else if(s==="stock-detalle")    content = renderStockDetalle(state.route.id);
+  else if(s==="stock-form")       content = renderStockForm();
   else content = renderHome();
   app.innerHTML = content + renderBottomNav();
 }
@@ -378,6 +452,7 @@ function renderBottomNav(){
   const s = state.route.screen;
   const hasPendientes = (state.pendientes||[]).length > 0;
   const homeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>';
+  const isStock = s==='stock'||s==='stock-detalle'||s==='stock-form';
   return `<div class="bottom-nav">
     <div class="nav-item ${s==='home'?'active':''}" onclick="navHome()">
       ${homeIcon}<span>Inicio</span>
@@ -385,13 +460,13 @@ function renderBottomNav(){
     <div class="nav-item ${s==='clientes'?'active':''}" onclick="nav('clientes')">
       ${ic('clients')}<span>Clientas</span>
     </div>
+    <div class="nav-item ${isStock?'active':''}" onclick="nav('stock')">
+      ${ic('stock')}<span>Stock</span>
+    </div>
     <div class="nav-item ${s==='notificaciones'?'active':''}" onclick="nav('notificaciones')" style="position:relative;">
       ${ic('bell')}
       ${hasPendientes?`<span style="position:absolute;top:8px;right:calc(50% - 14px);width:8px;height:8px;background:var(--danger);border-radius:50%;"></span>`:''}
       <span>Alertas</span>
-    </div>
-    <div class="nav-item" onclick="doLogout()">
-      ${ic('logout')}<span>Salir</span>
     </div>
   </div>`;
 }
@@ -406,9 +481,10 @@ function renderHome(){
   const arrowSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18"><polyline points="9 18 15 12 9 6"/></svg>';
   return `
   <div class="home-screen">
-    <div class="home-header">
+    <div class="home-header" style="position:relative;">
       <div class="home-brand">Salon Visagista</div>
       <div class="home-subtitle">Panel de Administración</div>
+      <div onclick="doLogout()" style="position:absolute;top:16px;right:20px;color:var(--gray);cursor:pointer;padding:8px;">${ic('logout')}</div>
     </div>
     <div class="home-cards">
       <div class="home-card" onclick="nav('clientes')">
@@ -422,6 +498,13 @@ function renderHome(){
         <div class="home-card-left">
           <div class="home-card-title">Estadísticas</div>
           <div class="home-card-sub">Actividad general y por clienta</div>
+        </div>
+        <div class="home-card-arrow">${arrowSvg}</div>
+      </div>
+      <div class="home-card" onclick="nav('stock')">
+        <div class="home-card-left">
+          <div class="home-card-title">Stock</div>
+          <div class="home-card-sub">${state.stockProductos.length} producto${state.stockProductos.length!==1?'s':''} · ${state.stockProductos.filter(p=>stockNivel(p)==='out').length} sin stock</div>
         </div>
         <div class="home-card-arrow">${arrowSvg}</div>
       </div>
@@ -1026,6 +1109,362 @@ function enviarNotifCustom(){
   window.open(`https://wa.me/${tel}?text=${encodeURIComponent(texto)}`,"_blank");
 }
 
+/* ══════════════════════════════════════════════
+   MÓDULO STOCK
+   ══════════════════════════════════════════════ */
+
+function loadStock(){
+  try{
+    state.stockProductos = JSON.parse(localStorage.getItem('vs_stock_prods')||'[]');
+    state.stockMovimientos = JSON.parse(localStorage.getItem('vs_stock_movs')||'[]');
+  }catch(e){}
+}
+function saveStock(){
+  localStorage.setItem('vs_stock_prods', JSON.stringify(state.stockProductos));
+  localStorage.setItem('vs_stock_movs', JSON.stringify(state.stockMovimientos));
+}
+
+function stockNivel(p){
+  if(p.stockActual<=0) return 'out';
+  if(p.stockActual<=p.stockMinimo) return 'low';
+  return 'ok';
+}
+function stockBadge(p){
+  const n=stockNivel(p);
+  const labels={ok:p.stockActual+' '+p.unidad,low:'⚠ '+p.stockActual+' '+p.unidad,out:'Sin stock'};
+  return `<span class="stock-badge ${n}">${labels[n]}</span>`;
+}
+const STOCK_CATS=['Shampoo','Acondicionador','Tintura','Crema / Tratamiento','Herramienta','Otro'];
+
+function renderStock(){
+  const prods = state.stockProductos;
+  const sinStock = prods.filter(p=>stockNivel(p)==='out').length;
+  const bajoStock = prods.filter(p=>stockNivel(p)==='low').length;
+
+  // Agrupar por categoría
+  const cats = {};
+  prods.forEach(p=>{
+    const c=p.categoria||'Otro';
+    if(!cats[c]) cats[c]=[];
+    cats[c].push(p);
+  });
+
+  let html=`<div class="screen">
+  <div class="topbar">
+    <div class="back-btn" onclick="navHome()">${ic('chevron')}</div>
+    <h2>Stock</h2>
+    <div onclick="nav('stock-form')" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--gold);">${ic('plus')}</div>
+  </div>
+  <div class="stock-summary">
+    <div class="stock-stat"><div class="stock-stat-num">${prods.length}</div><div class="stock-stat-lbl">Productos</div></div>
+    <div class="stock-stat"><div class="stock-stat-num" style="color:var(--danger)">${sinStock}</div><div class="stock-stat-lbl">Sin stock</div></div>
+    <div class="stock-stat"><div class="stock-stat-num" style="color:#e6a817">${bajoStock}</div><div class="stock-stat-lbl">Stock bajo</div></div>
+  </div>`;
+
+  if(prods.length===0){
+    html+=`<div class="empty-state"><p>Sin productos</p><div class="empty-state-sub">Usá el botón + o el escáner para agregar</div></div>`;
+  } else {
+    Object.entries(cats).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([cat,items])=>{
+      html+=`<div class="stock-cat-title">${cat}</div>`;
+      items.sort((a,b)=>a.nombre.localeCompare(b.nombre)).forEach(p=>{
+        html+=`<div class="stock-item" onclick="nav('stock-detalle',{id:'${p.id}'})">
+          <div class="stock-item-left">
+            <div class="stock-item-name">${p.nombre}</div>
+            ${p.marca?`<div class="stock-item-brand">${p.marca}</div>`:''}
+          </div>
+          ${stockBadge(p)}
+        </div>`;
+      });
+    });
+  }
+  html+=`</div>
+  <button class="stock-fab" onclick="abrirScanner()" title="Escanear código">${ic('scan')}</button>`;
+  return html;
+}
+
+function renderStockDetalle(id){
+  const p = state.stockProductos.find(x=>x.id===id);
+  if(!p) return `<div class="screen"><div class="topbar"><div class="back-btn" onclick="nav('stock')">${ic('chevron')}</div><h2>Stock</h2><div></div></div></div>`;
+  const movs = state.stockMovimientos.filter(m=>m.productoId===id).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  const nivel = stockNivel(p);
+  const nivelColor = nivel==='ok'?'#5cb85c':nivel==='low'?'#e6a817':'#e74c3c';
+  return `<div class="screen">
+  <div class="topbar">
+    <div class="back-btn" onclick="nav('stock')">${ic('chevron')}</div>
+    <h2 style="font-size:15px">${p.nombre}</h2>
+    <div onclick="nav('stock-form',{editId:'${id}'})" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--gold);">${ic('edit')}</div>
+  </div>
+  <div class="detail-header">
+    <div class="detail-name">${p.nombre}</div>
+    <div class="detail-info">
+      ${p.marca?`<span class="detail-gold">${p.marca}</span> &nbsp;·&nbsp; `:''}${p.categoria}
+      ${p.codigo?`<br>Código: ${p.codigo}`:''}
+    </div>
+    <div style="margin-top:14px;font-family:'Cormorant Garamond',serif;font-size:42px;font-weight:300;color:${nivelColor};line-height:1;">
+      ${p.stockActual} <span style="font-size:16px;color:var(--gray)">${p.unidad}</span>
+    </div>
+    ${p.stockMinimo>0?`<div style="font-size:10px;color:var(--gray);letter-spacing:.5px;margin-top:4px;">Mínimo: ${p.stockMinimo} ${p.unidad}</div>`:''}
+  </div>
+  <div style="display:flex;gap:1px;margin:0;">
+    <button class="stock-mov-btn entrada" onclick="abrirMovModal('${id}','entrada')">+ Entrada</button>
+    <button class="stock-mov-btn salida" onclick="abrirMovModal('${id}','salida')">− Salida</button>
+  </div>
+  <div class="stock-cat-title">Movimientos</div>
+  ${movs.length===0?`<div style="padding:30px 20px;text-align:center;color:var(--gray);font-size:13px;">Sin movimientos registrados</div>`:''}
+  ${movs.map(m=>`<div class="mov-list-item">
+    <div>
+      <span class="mov-tipo ${m.tipo}">${m.tipo}</span>
+      ${m.nota?`<div class="mov-meta" style="margin-top:5px">${m.nota}</div>`:''}
+      <div class="mov-meta">${formatDate(m.fecha.slice(0,10))} ${m.fecha.slice(11,16)}</div>
+    </div>
+    <div class="mov-qty" style="color:${m.tipo==='entrada'?'#5cb85c':'#e74c3c'}">${m.tipo==='entrada'?'+':'-'}${m.cantidad}</div>
+  </div>`).join('')}
+  </div>`;
+}
+
+function renderStockForm(){
+  const editId = state.route.editId||null;
+  const p = editId ? state.stockProductos.find(x=>x.id===editId) : (state.stockFormPrefill||{});
+  const titulo = editId ? 'Editar producto' : 'Nuevo producto';
+  return `<div class="screen">
+  <div class="topbar">
+    <div class="back-btn" onclick="nav(${editId?`'stock-detalle',{id:'${editId}'}`:`'stock'`})">${ic('chevron')}</div>
+    <h2>${titulo}</h2>
+    ${editId?`<div onclick="eliminarProducto('${editId}')" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--danger);">${ic('trash')}</div>`:'<div></div>'}
+  </div>
+  <div class="stock-form">
+    ${p.codigo?`<div class="sform-group">
+      <label class="sform-label">Código de barras</label>
+      <input class="sform-input" id="sf-codigo" value="${p.codigo||''}" readonly style="color:var(--gray);letter-spacing:2px;">
+    </div>`:`<div class="sform-group">
+      <label class="sform-label">Código de barras (opcional)</label>
+      <input class="sform-input" id="sf-codigo" placeholder="Escanear o escribir" value="${p.codigo||''}">
+    </div>`}
+    <div class="sform-group">
+      <label class="sform-label">Nombre del producto *</label>
+      <input class="sform-input" id="sf-nombre" placeholder="Ej: Shampoo Hidratante" value="${p.nombre||''}">
+    </div>
+    <div class="sform-group">
+      <label class="sform-label">Marca</label>
+      <input class="sform-input" id="sf-marca" placeholder="Ej: L'Oreal, Wella, Kerastase" value="${p.marca||''}">
+    </div>
+    <div class="sform-group">
+      <label class="sform-label">Categoría</label>
+      <select class="sform-select" id="sf-cat">
+        ${STOCK_CATS.map(c=>`<option value="${c}" ${(p.categoria||'Otro')===c?'selected':''}>${c}</option>`).join('')}
+      </select>
+    </div>
+    <div class="sform-row">
+      <div class="sform-group">
+        <label class="sform-label">Stock actual *</label>
+        <input class="sform-input" id="sf-stock" type="number" min="0" placeholder="0" value="${p.stockActual??''}">
+      </div>
+      <div class="sform-group">
+        <label class="sform-label">Stock mínimo</label>
+        <input class="sform-input" id="sf-min" type="number" min="0" placeholder="0" value="${p.stockMinimo??''}">
+        <div class="sform-hint">Avisa cuando baje de este valor</div>
+      </div>
+    </div>
+    <div class="sform-group">
+      <label class="sform-label">Unidad</label>
+      <select class="sform-select" id="sf-unidad">
+        ${['unid','ml','lt','gr','kg','caja','par'].map(u=>`<option value="${u}" ${(p.unidad||'unid')===u?'selected':''}>${u}</option>`).join('')}
+      </select>
+    </div>
+    <button class="sform-btn" onclick="guardarProducto(${editId?`'${editId}'`:'null'})">${editId?'Guardar cambios':'Agregar producto'}</button>
+  </div>
+  </div>`;
+}
+
+function guardarProducto(editId){
+  const nombre = document.getElementById('sf-nombre').value.trim();
+  if(!nombre){ toast('Ingresá el nombre del producto'); return; }
+  const stock = parseInt(document.getElementById('sf-stock').value)||0;
+  const prod = {
+    id: editId || ('p'+Date.now()),
+    codigo: document.getElementById('sf-codigo').value.trim(),
+    nombre,
+    marca: document.getElementById('sf-marca').value.trim(),
+    categoria: document.getElementById('sf-cat').value,
+    stockActual: stock,
+    stockMinimo: parseInt(document.getElementById('sf-min').value)||0,
+    unidad: document.getElementById('sf-unidad').value,
+    ultimoUpdate: new Date().toISOString(),
+  };
+  if(editId){
+    const idx = state.stockProductos.findIndex(x=>x.id===editId);
+    if(idx>=0) state.stockProductos[idx]=prod;
+  } else {
+    state.stockProductos.push(prod);
+    if(stock>0){
+      state.stockMovimientos.push({id:'m'+Date.now(),productoId:prod.id,tipo:'entrada',cantidad:stock,fecha:new Date().toISOString(),nota:'Stock inicial'});
+    }
+  }
+  saveStock();
+  state.stockFormPrefill = null;
+  toast(editId?'Producto actualizado':'Producto agregado');
+  nav('stock-detalle',{id:prod.id});
+}
+
+function eliminarProducto(id){
+  if(!confirm('¿Eliminar este producto y su historial?')) return;
+  state.stockProductos = state.stockProductos.filter(p=>p.id!==id);
+  state.stockMovimientos = state.stockMovimientos.filter(m=>m.productoId!==id);
+  saveStock();
+  toast('Producto eliminado');
+  nav('stock');
+}
+
+// ── MOVIMIENTOS ──────────────────────────────
+function abrirMovModal(productoId, tipo){
+  state.stockQty = 1;
+  state.stockNota = '';
+  const p = state.stockProductos.find(x=>x.id===productoId);
+  const color = tipo==='entrada'?'var(--success)':'var(--danger)';
+  const label = tipo==='entrada'?'+ Entrada':'− Salida';
+  const overlay = document.createElement('div');
+  overlay.className='qty-overlay'; overlay.id='mov-overlay';
+  overlay.innerHTML=`<div class="qty-sheet">
+    <h3 style="color:${color}">${label}</h3>
+    <div class="sub">${p.nombre}</div>
+    <div class="qty-row">
+      <button class="qty-btn" onclick="cambiarQty(-1)">−</button>
+      <div class="qty-num" id="qty-display">1</div>
+      <button class="qty-btn" onclick="cambiarQty(1)">+</button>
+    </div>
+    <input class="qty-nota" id="qty-nota" placeholder="Nota opcional (proveedor, motivo...)" oninput="state.stockNota=this.value">
+    <button class="mov-confirm-btn ${tipo}" onclick="confirmarMovimiento('${productoId}','${tipo}')">Confirmar ${label}</button>
+    <button onclick="cerrarMovModal()" style="width:100%;padding:14px;margin-top:8px;background:transparent;border:1px solid var(--glass-bd);color:var(--gray);cursor:pointer;font-size:12px;letter-spacing:1px;">Cancelar</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function cambiarQty(d){
+  state.stockQty = Math.max(1, (state.stockQty||1)+d);
+  const el=document.getElementById('qty-display');
+  if(el) el.textContent=state.stockQty;
+}
+function cerrarMovModal(){ const el=document.getElementById('mov-overlay'); if(el) el.remove(); }
+function confirmarMovimiento(productoId, tipo){
+  const qty = state.stockQty||1;
+  const p = state.stockProductos.find(x=>x.id===productoId);
+  if(!p) return;
+  if(tipo==='salida' && p.stockActual<qty){ toast('Stock insuficiente'); return; }
+  p.stockActual += tipo==='entrada' ? qty : -qty;
+  p.ultimoUpdate = new Date().toISOString();
+  state.stockMovimientos.push({
+    id:'m'+Date.now(),
+    productoId,
+    tipo,
+    cantidad: qty,
+    fecha: new Date().toISOString(),
+    nota: state.stockNota||''
+  });
+  saveStock();
+  cerrarMovModal();
+  toast(tipo==='entrada'?`+${qty} registrado`:`-${qty} registrado`);
+  nav('stock-detalle',{id:productoId});
+}
+
+// ── ESCÁNER ──────────────────────────────────
+function abrirScanner(){
+  const overlay = document.createElement('div');
+  overlay.className='scanner-overlay'; overlay.id='scanner-overlay';
+  overlay.innerHTML=`
+    <div class="scanner-topbar">
+      <div style="color:var(--gold);font-size:11px;letter-spacing:3px;text-transform:uppercase;">Escanear código</div>
+      <div class="scanner-close" onclick="cerrarScanner()">✕</div>
+    </div>
+    <div class="scanner-viewport">
+      <video id="scanner-video" autoplay playsinline muted></video>
+      <div class="scanner-frame">
+        <div class="scanner-corner tl"></div>
+        <div class="scanner-corner tr"></div>
+        <div class="scanner-corner bl"></div>
+        <div class="scanner-corner br"></div>
+      </div>
+      <div class="scanner-hint">Apuntá al código de barras o QR</div>
+    </div>
+    <div class="scanner-manual">
+      <input id="scanner-input" type="text" inputmode="numeric" class="scanner-manual input" placeholder="O escribí el código manualmente">
+      <button class="scanner-manual-btn" onclick="usarCodigoManual()">Usar este código</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  iniciarCamara();
+}
+
+async function iniciarCamara(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
+    state.scannerStream = stream;
+    const video = document.getElementById('scanner-video');
+    if(!video){ cerrarScanner(); return; }
+    video.srcObject = stream;
+    await video.play();
+
+    if('BarcodeDetector' in window){
+      const detector = new BarcodeDetector({formats:['ean_13','ean_8','qr_code','code_128','code_39','upc_a','upc_e','itf']});
+      state.scannerTimer = setInterval(async()=>{
+        if(!document.getElementById('scanner-video')) return clearInterval(state.scannerTimer);
+        try{
+          const codes = await detector.detect(video);
+          if(codes.length>0){ cerrarScanner(); procesarCodigo(codes[0].rawValue); }
+        }catch(e){}
+      }, 400);
+    } else {
+      const hint = overlay && overlay.querySelector('.scanner-hint');
+      if(hint) hint.textContent='Cámara activa — escribí el código manualmente';
+    }
+  }catch(e){
+    toast('No se pudo acceder a la cámara — ingresá el código manualmente');
+  }
+}
+
+function cerrarScanner(){
+  if(state.scannerTimer){ clearInterval(state.scannerTimer); state.scannerTimer=null; }
+  if(state.scannerStream){ state.scannerStream.getTracks().forEach(t=>t.stop()); state.scannerStream=null; }
+  const el=document.getElementById('scanner-overlay'); if(el) el.remove();
+}
+
+function usarCodigoManual(){
+  const val=(document.getElementById('scanner-input').value||'').trim();
+  if(!val){ toast('Ingresá un código'); return; }
+  cerrarScanner();
+  procesarCodigo(val);
+}
+
+async function procesarCodigo(codigo){
+  // ¿Ya existe en el stock?
+  const existe = state.stockProductos.find(p=>p.codigo===codigo);
+  if(existe){
+    toast('Producto encontrado');
+    nav('stock-detalle',{id:existe.id});
+    return;
+  }
+  // Buscar en Open Beauty Facts (cosméticos)
+  toast('Buscando producto...');
+  let prefill = {codigo};
+  try{
+    const r = await fetch(`https://world.openbeautyfacts.org/api/v0/product/${codigo}.json`);
+    const data = await r.json();
+    if(data.status===1 && data.product){
+      const dp = data.product;
+      prefill.nombre = dp.product_name_es || dp.product_name || '';
+      prefill.marca = dp.brands || '';
+      const tags = (dp.categories_tags||[]).join(' ').toLowerCase();
+      if(tags.includes('shampoo')) prefill.categoria='Shampoo';
+      else if(tags.includes('conditioner')||tags.includes('acondicionador')) prefill.categoria='Acondicionador';
+      else if(tags.includes('dye')||tags.includes('color')||tags.includes('tintura')) prefill.categoria='Tintura';
+      else if(tags.includes('cream')||tags.includes('mask')||tags.includes('treatment')) prefill.categoria='Crema / Tratamiento';
+      if(prefill.nombre) toast(`Producto: ${prefill.nombre}`);
+      else toast('Código detectado — completá los datos');
+    } else {
+      toast('Código detectado — completá los datos');
+    }
+  }catch(e){ toast('Código detectado — completá los datos'); }
+  state.stockFormPrefill = prefill;
+  nav('stock-form');
+}
+
 /* ── VIEWER FOTO ── */
 function openPhotoViewer(clienteId,tratId,idx){
   const tratas=state.tratCache[clienteId]||[];
@@ -1048,6 +1487,7 @@ function formatDate(d){
 
 /* ── INIT ── */
 loadLocalState();
+loadStock();
 render();
 if(state.authed) loadClientes();
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
