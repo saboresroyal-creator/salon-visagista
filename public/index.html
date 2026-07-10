@@ -1370,133 +1370,117 @@ function confirmarMovimiento(productoId, tipo){
   nav('stock-detalle',{id:productoId});
 }
 
-// ── ESCÁNER ──────────────────────────────────
+// ── ESCÁNER (Quagga2) ────────────────────────
 
 function abrirScanner(){
   document.getElementById('scanner-overlay')?.remove();
   document.getElementById('_scan-style')?.remove();
 
-  // Animación de la línea de barrido
   const st = document.createElement('style');
   st.id = '_scan-style';
-  st.textContent = '@keyframes scanBeam{0%{top:4px}50%{top:calc(100% - 6px)}100%{top:4px}}';
+  st.textContent = `
+    @keyframes scanBeam{0%{top:4px}50%{top:calc(100% - 6px)}100%{top:4px}}
+    #scan-container video{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;object-fit:cover!important;border:none!important;}
+    #scan-container canvas.drawingBuffer{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;opacity:.35;}
+  `;
   document.head.appendChild(st);
 
   const ov = document.createElement('div');
   ov.id = 'scanner-overlay';
   ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:#000;display:flex;flex-direction:column;';
   ov.innerHTML = `
-    <div style="position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:linear-gradient(rgba(0,0,0,.7),transparent);">
-      <span style="color:var(--gold);font-size:10px;letter-spacing:3px;text-transform:uppercase;">Escanear código</span>
-      <span onclick="cerrarScanner()" style="color:#fff;font-size:26px;line-height:1;cursor:pointer;padding:2px 6px;">✕</span>
-    </div>
+    <!-- Quagga renderiza video+canvas acá -->
+    <div id="scan-container" style="flex:1;position:relative;overflow:hidden;background:#000;"></div>
 
-    <!-- Video de cámara -->
-    <video id="scan-video" autoplay playsinline muted
-      style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"></video>
-
-    <!-- Overlay oscuro con recuadro transparente -->
-    <div style="position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-      <!-- sombra superior -->
-      <div style="width:100%;flex:1;background:rgba(0,0,0,.55);"></div>
-      <!-- fila del recuadro -->
-      <div style="width:100%;display:flex;align-items:stretch;height:140px;">
-        <div style="flex:1;background:rgba(0,0,0,.55);"></div>
-        <!-- recuadro dorado -->
-        <div style="width:290px;position:relative;border:2px solid var(--gold);">
-          <!-- esquinas brillantes -->
-          <div style="position:absolute;top:-3px;left:-3px;width:22px;height:22px;border-top:3px solid var(--gold2);border-left:3px solid var(--gold2);"></div>
-          <div style="position:absolute;top:-3px;right:-3px;width:22px;height:22px;border-top:3px solid var(--gold2);border-right:3px solid var(--gold2);"></div>
-          <div style="position:absolute;bottom:-3px;left:-3px;width:22px;height:22px;border-bottom:3px solid var(--gold2);border-left:3px solid var(--gold2);"></div>
-          <div style="position:absolute;bottom:-3px;right:-3px;width:22px;height:22px;border-bottom:3px solid var(--gold2);border-right:3px solid var(--gold2);"></div>
-          <!-- línea de barrido -->
-          <div style="position:absolute;left:4px;right:4px;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);animation:scanBeam 1.8s ease-in-out infinite;opacity:.9;"></div>
+    <!-- UI encima de la cámara -->
+    <div style="position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;">
+      <!-- topbar -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:linear-gradient(rgba(0,0,0,.75),transparent);pointer-events:auto;">
+        <span style="color:var(--gold);font-size:10px;letter-spacing:3px;text-transform:uppercase;">Escanear código</span>
+        <span onclick="cerrarScanner()" style="color:#fff;font-size:28px;line-height:1;cursor:pointer;padding:2px 8px;">✕</span>
+      </div>
+      <!-- recuadro central -->
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+        <div style="position:relative;width:290px;height:130px;border:2px solid var(--gold);">
+          <div style="position:absolute;top:-3px;left:-3px;width:24px;height:24px;border-top:3px solid var(--gold2);border-left:3px solid var(--gold2);"></div>
+          <div style="position:absolute;top:-3px;right:-3px;width:24px;height:24px;border-top:3px solid var(--gold2);border-right:3px solid var(--gold2);"></div>
+          <div style="position:absolute;bottom:-3px;left:-3px;width:24px;height:24px;border-bottom:3px solid var(--gold2);border-left:3px solid var(--gold2);"></div>
+          <div style="position:absolute;bottom:-3px;right:-3px;width:24px;height:24px;border-bottom:3px solid var(--gold2);border-right:3px solid var(--gold2);"></div>
+          <div style="position:absolute;left:6px;right:6px;height:2px;background:linear-gradient(90deg,transparent,var(--gold2),transparent);animation:scanBeam 1.6s ease-in-out infinite;"></div>
         </div>
-        <div style="flex:1;background:rgba(0,0,0,.55);"></div>
+        <div style="color:rgba(255,255,255,.5);font-size:11px;letter-spacing:1px;margin-top:14px;text-align:center;">Apuntá el código de barras al recuadro</div>
       </div>
-      <!-- sombra inferior + hint -->
-      <div style="width:100%;flex:1;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding-top:16px;">
-        <span style="color:rgba(255,255,255,.55);font-size:11px;letter-spacing:1px;">Apuntá el código al recuadro</span>
+      <!-- input manual al pie -->
+      <div style="pointer-events:auto;background:rgba(0,0,0,.92);padding:12px 16px;display:flex;gap:8px;border-top:1px solid rgba(255,255,255,.06);">
+        <input id="scan-input" type="text" inputmode="numeric" placeholder="O escribí el código acá"
+          style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);color:#fff;padding:12px 14px;font-size:14px;font-family:'Montserrat',sans-serif;">
+        <button onclick="usarCodigoManual()"
+          style="background:var(--gold);color:var(--black);border:none;padding:12px 18px;font-weight:700;font-size:11px;cursor:pointer;">OK</button>
       </div>
-    </div>
-
-    <!-- Input manual -->
-    <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.9);padding:12px 16px;display:flex;gap:8px;border-top:1px solid rgba(255,255,255,.07);">
-      <input id="scan-input" type="text" inputmode="numeric" placeholder="O ingresá el código a mano"
-        style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);color:#fff;padding:12px 14px;font-size:14px;font-family:'Montserrat',sans-serif;border-radius:0;">
-      <button onclick="usarCodigoManual()"
-        style="background:var(--gold);color:var(--black);border:none;padding:12px 18px;font-weight:700;font-size:11px;letter-spacing:1px;cursor:pointer;">OK</button>
     </div>`;
   document.body.appendChild(ov);
-  iniciarVideoScan();
+
+  // Cargar Quagga2 e iniciar
+  if(window.Quagga){ iniciarQuagga(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js';
+  s.onload = iniciarQuagga;
+  s.onerror = () => toast('Sin conexión para el escáner — escribí el código manualmente');
+  document.head.appendChild(s);
 }
 
-async function iniciarVideoScan(){
-  try{
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:'environment', width:{ideal:1920}, height:{ideal:1080}}
-    });
-    state.scannerStream = stream;
-    const video = document.getElementById('scan-video');
-    if(!video){ cerrarScanner(); return; }
-    video.srcObject = stream;
-    await video.play();
+function iniciarQuagga(){
+  const container = document.getElementById('scan-container');
+  if(!container) return;
 
-    if('BarcodeDetector' in window){
-      // Chrome Android / Safari 17.4+ — detección nativa, muy rápida
-      const det = new BarcodeDetector({
-        formats:['ean_13','ean_8','qr_code','code_128','code_39','upc_a','upc_e','itf','codabar','data_matrix']
-      });
-      state.scannerTimer = setInterval(async()=>{
-        if(!document.getElementById('scan-video')){ clearInterval(state.scannerTimer); return; }
-        try{
-          const found = await det.detect(video);
-          if(found.length){
-            if(navigator.vibrate) navigator.vibrate([60]);
-            const code = found[0].rawValue;
-            cerrarScanner();
-            procesarCodigo(code);
-          }
-        }catch(e){}
-      }, 200);
-    } else {
-      // Fallback ZXing via html5-qrcode (otros browsers)
-      const cargar = () => new Promise((res,rej)=>{
-        if(window.Html5Qrcode){ res(); return; }
-        const s = document.createElement('script');
-        s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
-        s.onload = res; s.onerror = rej;
-        document.head.appendChild(s);
-      });
-      await cargar().catch(()=>{});
-      if(!window.Html5Qrcode) return;
+  Quagga.init({
+    inputStream:{
+      name:'Live',
+      type:'LiveStream',
+      target: container,
+      constraints:{
+        facingMode:'environment',
+        width:{min:640, ideal:1280},
+        height:{min:480, ideal:720},
+      },
+    },
+    locator:{ patchSize:'medium', halfSample:true },
+    numOfWorkers: navigator.hardwareConcurrency || 2,
+    frequency: 10,
+    decoder:{
+      readers:[
+        'ean_reader',
+        'ean_8_reader',
+        'code_128_reader',
+        'upc_reader',
+        'upc_e_reader',
+        'code_39_reader',
+      ],
+      multiple: false,
+    },
+    locate: true,
+  }, err=>{
+    if(err){ toast('No se pudo acceder a la cámara'); return; }
+    Quagga.start();
+  });
 
-      // Capturar frames del video con canvas y pasarlos a ZXing
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      state.scannerTimer = setInterval(()=>{
-        if(!document.getElementById('scan-video')){ clearInterval(state.scannerTimer); return; }
-        if(video.readyState < 2) return;
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0);
-        canvas.toBlob(blob=>{
-          if(!blob) return;
-          const file = new File([blob],'f.jpg',{type:'image/jpeg'});
-          Html5Qrcode.scanFile(file, false)
-            .then(code=>{ if(navigator.vibrate) navigator.vibrate([60]); cerrarScanner(); procesarCodigo(code); })
-            .catch(()=>{});
-        },'image/jpeg', 0.85);
-      }, 350);
-    }
-  }catch(e){
-    toast('Sin permiso de cámara — ingresá el código manualmente');
-  }
+  let lastCode = '', lastTime = 0;
+  Quagga.onDetected(result=>{
+    const code = result?.codeResult?.code;
+    if(!code) return;
+    // Evitar lecturas duplicadas en menos de 1.5s
+    const now = Date.now();
+    if(code === lastCode && now - lastTime < 1500) return;
+    lastCode = code; lastTime = now;
+
+    if(navigator.vibrate) navigator.vibrate([80]);
+    cerrarScanner();
+    procesarCodigo(code);
+  });
 }
 
 function cerrarScanner(){
-  if(state.scannerTimer){ clearInterval(state.scannerTimer); state.scannerTimer=null; }
-  if(state.scannerStream){ state.scannerStream.getTracks().forEach(t=>t.stop()); state.scannerStream=null; }
+  try{ if(window.Quagga) Quagga.stop(); }catch(e){}
   document.getElementById('scanner-overlay')?.remove();
   document.getElementById('_scan-style')?.remove();
 }
