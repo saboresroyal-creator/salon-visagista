@@ -310,6 +310,7 @@ let state = {
   stockNota: "",
   scannerStream: null,
   scannerTimer: null,
+  zxingReader: null,
   stockFormPrefill: null,
 };
 
@@ -1473,139 +1474,171 @@ function confirmarMovimiento(productoId, tipo){
   nav('stock-detalle',{id:productoId});
 }
 
-// ── ESCÁNER ────────────────────────
+// ── ESCÁNER (ZXing + BarcodeDetector nativo) ────────────────────────
 
 function abrirScanner(){
-  document.getElementById('scanner-overlay')?.remove();
-  document.getElementById('_scan-style')?.remove();
+  cerrarScanner();
 
   const st = document.createElement('style');
   st.id = '_scan-style';
   st.textContent = `
-    @keyframes scanBeam{0%{top:8px}50%{top:calc(100% - 10px)}100%{top:8px}}
-    #scan-container video{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;object-fit:cover!important;}
-    #scan-container canvas{display:none!important;}
+    @keyframes scanLine{0%{top:4%}50%{top:96%}100%{top:4%}}
+    #sv-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+    #scan-status{transition:opacity .3s;}
+    .scan-corner{position:absolute;width:22px;height:22px;}
+    .scan-corner.tl{top:-2px;left:-2px;border-top:3px solid var(--gold2);border-left:3px solid var(--gold2);}
+    .scan-corner.tr{top:-2px;right:-2px;border-top:3px solid var(--gold2);border-right:3px solid var(--gold2);}
+    .scan-corner.bl{bottom:-2px;left:-2px;border-bottom:3px solid var(--gold2);border-left:3px solid var(--gold2);}
+    .scan-corner.br{bottom:-2px;right:-2px;border-bottom:3px solid var(--gold2);border-right:3px solid var(--gold2);}
+    .scan-beam{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);animation:scanLine 2s ease-in-out infinite;box-shadow:0 0 6px var(--gold);}
+    #torch-btn.on{color:var(--gold)!important;}
   `;
   document.head.appendChild(st);
 
   const ov = document.createElement('div');
   ov.id = 'scanner-overlay';
-  ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:#000;display:flex;flex-direction:column;';
-  ov.innerHTML = `
-    <div id="scan-container" style="flex:1;position:relative;overflow:hidden;background:#000;"></div>
-    <div style="position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:linear-gradient(rgba(0,0,0,.75),transparent);pointer-events:auto;">
-        <span style="color:var(--gold);font-size:10px;letter-spacing:3px;text-transform:uppercase;">Escanear código</span>
-        <span onclick="cerrarScanner()" style="color:#fff;font-size:28px;line-height:1;cursor:pointer;padding:2px 8px;">✕</span>
-      </div>
-      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-        <div style="position:relative;width:290px;height:130px;border:2px solid var(--gold);">
-          <div style="position:absolute;top:-3px;left:-3px;width:24px;height:24px;border-top:3px solid var(--gold2);border-left:3px solid var(--gold2);"></div>
-          <div style="position:absolute;top:-3px;right:-3px;width:24px;height:24px;border-top:3px solid var(--gold2);border-right:3px solid var(--gold2);"></div>
-          <div style="position:absolute;bottom:-3px;left:-3px;width:24px;height:24px;border-bottom:3px solid var(--gold2);border-left:3px solid var(--gold2);"></div>
-          <div style="position:absolute;bottom:-3px;right:-3px;width:24px;height:24px;border-bottom:3px solid var(--gold2);border-right:3px solid var(--gold2);"></div>
-          <div style="position:absolute;left:6px;right:6px;height:2px;background:linear-gradient(90deg,transparent,var(--gold2),transparent);animation:scanBeam 1.6s ease-in-out infinite;"></div>
+  ov.style.cssText='position:fixed;inset:0;z-index:200;background:#000;display:flex;flex-direction:column;touch-action:none;';
+  ov.innerHTML=`
+    <div id="scan-vp" style="flex:1;position:relative;overflow:hidden;background:#000;">
+      <video id="sv-video" autoplay playsinline muted></video>
+      <!-- sombra alrededor del recuadro -->
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+        <div style="position:absolute;inset:0;background:rgba(0,0,0,.55);"></div>
+        <div id="scan-box" style="position:relative;width:80%;max-width:320px;aspect-ratio:1.8/1;z-index:1;background:transparent;">
+          <div style="position:absolute;inset:0;background:transparent;outline:999px solid rgba(0,0,0,.55);"></div>
+          <div class="scan-corner tl"></div><div class="scan-corner tr"></div>
+          <div class="scan-corner bl"></div><div class="scan-corner br"></div>
+          <div class="scan-beam"></div>
         </div>
-        <div style="color:rgba(255,255,255,.5);font-size:11px;letter-spacing:1px;margin-top:14px;text-align:center;">Apuntá el código de barras al recuadro</div>
       </div>
-      <div style="pointer-events:auto;background:rgba(0,0,0,.92);padding:12px 16px;display:flex;gap:8px;border-top:1px solid rgba(255,255,255,.06);">
-        <input id="scan-input" type="text" inputmode="numeric" placeholder="O escribí el código acá"
-          style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);color:#fff;padding:12px 14px;font-size:14px;font-family:'Montserrat',sans-serif;outline:none;">
-        <button onclick="usarCodigoManual()"
-          style="background:var(--gold);color:var(--black);border:none;padding:12px 18px;font-weight:700;font-size:11px;cursor:pointer;">OK</button>
+      <!-- topbar -->
+      <div style="position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(rgba(0,0,0,.7),transparent);z-index:2;">
+        <span style="color:var(--gold);font-size:10px;letter-spacing:3px;text-transform:uppercase;">Escanear</span>
+        <div style="display:flex;gap:14px;align-items:center;">
+          <span id="torch-btn" onclick="toggleTorch()" style="color:rgba(255,255,255,.6);font-size:22px;cursor:pointer;" title="Linterna">⚡</span>
+          <span onclick="cerrarScanner()" style="color:#fff;font-size:26px;line-height:1;cursor:pointer;">✕</span>
+        </div>
       </div>
+      <!-- status -->
+      <div id="scan-status" style="position:absolute;bottom:16px;left:0;right:0;text-align:center;color:rgba(255,255,255,.5);font-size:11px;letter-spacing:1px;z-index:2;">Iniciando cámara...</div>
+    </div>
+    <!-- panel inferior -->
+    <div style="background:#0a0a0a;border-top:1px solid rgba(201,169,110,.2);padding:14px 16px;">
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <input id="scan-input" type="text" inputmode="numeric" placeholder="O escribí el código manualmente"
+          style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(201,169,110,.3);color:#fff;padding:12px 14px;font-size:14px;font-family:'Montserrat',sans-serif;outline:none;border-radius:2px;">
+        <button onclick="usarCodigoManual()" style="background:var(--gold);color:#000;border:none;padding:12px 18px;font-weight:700;font-size:11px;cursor:pointer;">OK</button>
+      </div>
+      <button onclick="cerrarScanner()" style="width:100%;padding:10px;background:transparent;border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.4);font-size:10px;letter-spacing:2px;cursor:pointer;">CANCELAR</button>
     </div>`;
   document.body.appendChild(ov);
 
-  // BarcodeDetector nativo (Chrome Android 83+, Safari 17.4+) → más confiable
+  // Iniciar: BarcodeDetector nativo primero, luego ZXing como fallback
   if('BarcodeDetector' in window){
     iniciarNativo();
   } else {
-    cargarQuagga();
+    cargarZXing();
   }
 }
 
+function setScanStatus(txt){ const el=document.getElementById('scan-status'); if(el) el.textContent=txt; }
+
+// ── Motor 1: BarcodeDetector nativo ──
 async function iniciarNativo(){
-  const container = document.getElementById('scan-container');
-  if(!container) return;
-  const video = document.createElement('video');
-  video.autoplay = true; video.playsInline = true; video.muted = true;
-  video.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;';
-  container.appendChild(video);
+  const video = document.getElementById('sv-video');
+  if(!video) return;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:'environment', width:{ideal:1280}, height:{ideal:720} }
+      video:{ facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080} }
     });
     state.scannerStream = stream;
     video.srcObject = stream;
     await video.play();
+
+    // intentar torch
+    const track = stream.getVideoTracks()[0];
+    state._scanTrack = track;
+
     const detector = new BarcodeDetector({
-      formats:['ean_13','ean_8','code_128','upc_a','upc_e','code_39']
+      formats:['ean_13','ean_8','code_128','upc_a','upc_e','code_39','qr_code','data_matrix']
     });
+    setScanStatus('Apuntá al código de barras o QR');
     let active = true;
     const loop = async () => {
       if(!active || !document.getElementById('scanner-overlay')) return;
       try {
-        const results = await detector.detect(video);
-        if(results.length > 0){
+        const r = await detector.detect(video);
+        if(r.length > 0){
           active = false;
-          if(navigator.vibrate) navigator.vibrate([80]);
+          navigator.vibrate?.([60,30,60]);
           cerrarScanner();
-          procesarCodigo(results[0].rawValue);
+          procesarCodigo(r[0].rawValue);
           return;
         }
       } catch(e){}
-      setTimeout(loop, 250);
+      setTimeout(loop, 150);
     };
-    setTimeout(loop, 600); // esperar que el video estabilice
+    setTimeout(loop, 800);
   } catch(e){
-    toast('No se pudo acceder a la cámara');
+    setScanStatus('Sin acceso a cámara — escribí el código');
   }
 }
 
-function cargarQuagga(){
-  if(window.Quagga){ iniciarQuagga(); return; }
+// ── Motor 2: ZXing (fallback) ──
+function cargarZXing(){
+  setScanStatus('Cargando escáner...');
+  if(window.ZXing){ iniciarZXing(); return; }
   const s = document.createElement('script');
-  s.src = 'https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js';
-  s.onload = iniciarQuagga;
-  s.onerror = () => toast('Sin conexión para el escáner — escribí el código manualmente');
+  s.src = 'https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js';
+  s.onload = iniciarZXing;
+  s.onerror = () => setScanStatus('Sin conexión — escribí el código manualmente');
   document.head.appendChild(s);
 }
 
-function iniciarQuagga(){
-  const container = document.getElementById('scan-container');
-  if(!container) return;
-  setTimeout(() => {
-    Quagga.init({
-      inputStream:{
-        name:'Live', type:'LiveStream', target:container,
-        constraints:{ facingMode:'environment' },
-      },
-      numOfWorkers: 0,
-      frequency: 5,
-      decoder:{
-        readers:['ean_reader','ean_8_reader','code_128_reader','upc_reader'],
-        multiple: false,
-      },
-      locate: true,
-      locator:{ patchSize:'medium', halfSample:false },
-    }, err=>{
-      if(err){ toast('No se pudo acceder a la cámara'); return; }
-      Quagga.start();
-    });
-    Quagga.onDetected(result=>{
-      const code = result?.codeResult?.code;
-      if(!code) return;
-      if(navigator.vibrate) navigator.vibrate([80]);
+async function iniciarZXing(){
+  const video = document.getElementById('sv-video');
+  if(!video || !window.ZXing) return;
+  try {
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    const reader = new ZXing.BrowserMultiFormatReader(hints, { delayBetweenScanAttempts:150, delayBetweenScanSuccess:500 });
+    state.zxingReader = reader;
+
+    const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
+    const back = devices.find(d=>/back|rear|environment/i.test(d.label)) || devices[devices.length-1];
+
+    setScanStatus('Apuntá al código de barras o QR');
+    await reader.decodeFromVideoDevice(back?.deviceId||null, video, (result, err) => {
+      if(!result) return;
+      navigator.vibrate?.([60,30,60]);
+      const code = result.getText();
       cerrarScanner();
       procesarCodigo(code);
     });
-  }, 300);
+
+    const track = video.srcObject?.getVideoTracks()[0];
+    if(track) state._scanTrack = track;
+  } catch(e){
+    setScanStatus('Error al iniciar cámara — escribí el código');
+  }
+}
+
+// ── Linterna ──
+let _torchOn = false;
+function toggleTorch(){
+  if(!state._scanTrack) return;
+  _torchOn = !_torchOn;
+  state._scanTrack.applyConstraints({advanced:[{torch:_torchOn}]}).catch(()=>{});
+  const btn = document.getElementById('torch-btn');
+  if(btn) btn.classList.toggle('on', _torchOn);
 }
 
 function cerrarScanner(){
+  _torchOn = false;
+  try{ if(state.zxingReader){ state.zxingReader.reset(); state.zxingReader=null; } }catch(e){}
   try{ if(window.Quagga) Quagga.stop(); }catch(e){}
   if(state.scannerStream){ state.scannerStream.getTracks().forEach(t=>t.stop()); state.scannerStream=null; }
+  state._scanTrack = null;
   document.getElementById('scanner-overlay')?.remove();
   document.getElementById('_scan-style')?.remove();
 }
