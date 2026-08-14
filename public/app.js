@@ -42,9 +42,18 @@ function renderNav() {
 function switchView(key) {
   currentView = key;
   renderNav();
-  const container = document.getElementById('view');
+
+  // Cada vista recibe un nodo propio y descartable: si una vista anterior
+  // todavía tiene un fetch en vuelo cuando cambiamos de pestaña, su
+  // renderizado tardío termina escribiendo en un nodo ya desprendido del
+  // DOM en vez de pisar la pantalla actual.
+  const outer = document.getElementById('view');
+  outer.innerHTML = '';
+  const inner = document.createElement('div');
+  outer.appendChild(inner);
+
   const mod = visibleModulesFor(currentUser).find((m) => m.key === key);
-  if (mod) mod.render(container);
+  if (mod) mod.render(inner);
 }
 
 async function boot() {

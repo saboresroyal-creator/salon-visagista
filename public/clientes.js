@@ -31,7 +31,7 @@ async function loadClientesList(container) {
     }
     box.innerHTML = `
       <table class="data-table">
-        <thead><tr><th>Nombre</th><th>Teléfono</th><th>Próxima cita</th><th>Cumpleaños</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Teléfono</th><th>Próxima cita</th><th>Cumpleaños</th><th>Puntos</th></tr></thead>
         <tbody>
           ${clientes.map((c) => `
             <tr data-id="${c.id}">
@@ -39,6 +39,7 @@ async function loadClientesList(container) {
               <td>${c.telefono || ''}</td>
               <td>${c.proxima_cita_fecha ? `${c.proxima_cita_fecha} ${c.proxima_cita_hora || ''}` : '—'}</td>
               <td>${c.fecha_nacimiento || '—'}</td>
+              <td>${c.puntos ?? 0}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -62,6 +63,13 @@ function openClienteModal(cliente, container) {
   backdrop.innerHTML = `
     <div class="modal" style="width:560px;">
       <h2>${isEdit ? cliente.nombre : 'Nueva clienta'}</h2>
+
+      ${isEdit ? `
+        <div class="card" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; padding:10px 14px;">
+          <div><b style="font-size:1.3rem;">${cliente.puntos ?? 0}</b> puntos</div>
+          <button class="secondary" id="cm-ajustar-puntos" type="button">Ajustar puntos</button>
+        </div>
+      ` : ''}
 
       <div class="field"><label>Nombre</label><input id="cm-nombre" value="${cliente?.nombre || ''}" /></div>
       <div class="row">
@@ -103,6 +111,7 @@ function openClienteModal(cliente, container) {
   if (isEdit) {
     renderTratamientos(backdrop, cliente);
     backdrop.querySelector('#cm-add-tratamiento').onclick = () => openTratamientoModal(cliente, backdrop);
+    backdrop.querySelector('#cm-ajustar-puntos').onclick = () => openAjustePuntosModal(cliente, backdrop, container);
     backdrop.querySelector('#cm-eliminar').onclick = async () => {
       if (!confirm(`¿Eliminar a ${cliente.nombre}? Esta acción no se puede deshacer.`)) return;
       try {
@@ -187,6 +196,80 @@ function openTratamientoModal(cliente, parentBackdrop) {
       renderTratamientos(parentBackdrop, cliente);
       toast('Tratamiento agregado');
       backdrop.remove();
+    } catch (e) { toast(e.message, 'err'); }
+  };
+}
+
+const PUNTOS_TIPO_LABEL = { ganado: 'Ganado por venta', canjeado: 'Canjeado', ajuste: 'Ajuste manual' };
+
+async function openAjustePuntosModal(cliente, parentBackdrop, container) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.style.zIndex = '200';
+  backdrop.innerHTML = `
+    <div class="modal">
+      <h2>Puntos de ${cliente.nombre}</h2>
+      <p style="margin-top:-8px;">Balance actual: <b>${cliente.puntos ?? 0}</b></p>
+
+      <div class="row">
+        <div class="field"><label>Puntos a sumar/restar</label><input type="number" id="ap-puntos" placeholder="Ej: 10 o -5" /></div>
+        <div class="field"><label>Motivo</label><input id="ap-motivo" placeholder="Opcional" /></div>
+      </div>
+      <button class="primary" id="ap-guardar" type="button">Aplicar ajuste</button>
+
+      <hr style="border-color:var(--border); margin:16px 0;" />
+      <h3 style="font-size:0.95rem;">Historial</h3>
+      <div id="ap-historial"><p style="color:var(--muted); font-size:0.85rem;">Cargando...</p></div>
+
+      <div class="modal-actions">
+        <button class="secondary" id="ap-cerrar">Cerrar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#ap-cerrar').onclick = () => backdrop.remove();
+  backdrop.onclick = (e) => { if (e.target === backdrop) backdrop.remove(); };
+
+  let historialRequestId = 0;
+  async function loadHistorial() {
+    const requestId = ++historialRequestId;
+    const box = backdrop.querySelector('#ap-historial');
+    const movimientos = await api.clientes.puntosHistorial(cliente.id);
+    if (requestId !== historialRequestId) return; // una carga más nueva ya empezó/terminó
+    box.innerHTML = movimientos.length === 0
+      ? '<p style="color:var(--muted); font-size:0.85rem;">Sin movimientos todavía.</p>'
+      : `
+        <table class="data-table">
+          <thead><tr><th>Fecha</th><th>Tipo</th><th>Puntos</th><th>Motivo</th></tr></thead>
+          <tbody>
+            ${movimientos.map((m) => `
+              <tr>
+                <td>${new Date(m.created_at).toLocaleDateString('es-AR')}</td>
+                <td>${PUNTOS_TIPO_LABEL[m.tipo] || m.tipo}</td>
+                <td>${m.puntos > 0 ? '+' : ''}${m.puntos}</td>
+                <td>${m.motivo || ''}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+  }
+  loadHistorial();
+
+  backdrop.querySelector('#ap-guardar').onclick = async () => {
+    const puntos = Number(backdrop.querySelector('#ap-puntos').value);
+    if (!Number.isInteger(puntos) || puntos === 0) { toast('Ingresá un número entero distinto de cero', 'err'); return; }
+    try {
+      const res = await api.clientes.ajustarPuntos(cliente.id, { puntos, motivo: backdrop.querySelector('#ap-motivo').value.trim() });
+      cliente.puntos = res.puntos;
+      backdrop.querySelector('p').innerHTML = `Balance actual: <b>${res.puntos}</b>`;
+      backdrop.querySelector('#ap-puntos').value = '';
+      backdrop.querySelector('#ap-motivo').value = '';
+      loadHistorial();
+      toast('Puntos actualizados');
+      const badge = parentBackdrop.querySelector('#cm-ajustar-puntos')?.previousElementSibling;
+      if (badge) badge.innerHTML = `<b style="font-size:1.3rem;">${res.puntos}</b> puntos`;
+      loadClientesList(container);
     } catch (e) { toast(e.message, 'err'); }
   };
 }

@@ -225,6 +225,38 @@ app.delete('/api/tratamientos/:id', requireModule('clientes'), async (req, res) 
   res.json({ ok: true });
 });
 
+// ── Puntos ──
+app.get('/api/clientes/:id/puntos', async (req, res) => {
+  const { id } = req.params;
+  const { data, error } = await supabase
+    .from('puntos_movimientos').select('*').eq('cliente_id', id).order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.post('/api/clientes/:id/puntos', requireModule('clientes'), async (req, res) => {
+  const { id } = req.params;
+  const puntos = Number(req.body.puntos);
+  if (!Number.isInteger(puntos) || puntos === 0) {
+    return res.status(400).json({ error: 'Los puntos deben ser un número entero distinto de cero' });
+  }
+
+  const { data: cliente, error: clienteError } = await supabase.from('clientes').select('puntos').eq('id', id).single();
+  if (clienteError) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+  const nuevoBalance = Math.max(0, (cliente.puntos || 0) + puntos);
+  const { error: updateError } = await supabase.from('clientes').update({ puntos: nuevoBalance }).eq('id', id);
+  if (updateError) return res.status(500).json({ error: updateError.message });
+
+  const { data: movimiento, error: movError } = await supabase
+    .from('puntos_movimientos')
+    .insert([{ cliente_id: id, tipo: 'ajuste', puntos, motivo: req.body.motivo || null }])
+    .select().single();
+  if (movError) return res.status(500).json({ error: movError.message });
+
+  res.json({ puntos: nuevoBalance, movimiento });
+});
+
 // ── Profesionales ──
 app.get('/api/profesionales', async (req, res) => {
   const { data, error } = await supabase
@@ -490,13 +522,37 @@ app.post('/api/ventas', async (req, res) => {
     }
   }
 
+  if (ventaPayload.cliente_id) {
+    const puntosGanados = Math.floor(total / 1000);
+    if (puntosGanados > 0) {
+      const { data: cliente } = await supabase.from('clientes').select('puntos').eq('id', ventaPayload.cliente_id).single();
+      if (cliente) {
+        await supabase.from('clientes').update({ puntos: (cliente.puntos || 0) + puntosGanados }).eq('id', ventaPayload.cliente_id);
+        await supabase.from('puntos_movimientos').insert([{
+          cliente_id: ventaPayload.cliente_id, tipo: 'ganado', puntos: puntosGanados, motivo: 'Venta', venta_id: venta.id
+        }]);
+      }
+    }
+  }
+
   const { data: full, error: fullError } = await supabase.from('ventas').select(VENTA_SELECT).eq('id', venta.id).single();
   if (fullError) return res.status(500).json({ error: fullError.message });
   res.json(full);
 });
 
 app.delete('/api/ventas/:id', async (req, res) => {
-  const { error } = await supabase.from('ventas').delete().eq('id', req.params.id);
+  const { id } = req.params;
+
+  const { data: movimientos } = await supabase
+    .from('puntos_movimientos').select('cliente_id, puntos').eq('venta_id', id).eq('tipo', 'ganado');
+  for (const m of movimientos || []) {
+    const { data: cliente } = await supabase.from('clientes').select('puntos').eq('id', m.cliente_id).single();
+    if (cliente) {
+      await supabase.from('clientes').update({ puntos: Math.max(0, (cliente.puntos || 0) - m.puntos) }).eq('id', m.cliente_id);
+    }
+  }
+
+  const { error } = await supabase.from('ventas').delete().eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
@@ -576,16 +632,22 @@ app.get('/api/reportes', async (req, res) => {
   const desde = req.query.desde || new Date().toISOString().slice(0, 10);
   const hasta = req.query.hasta || new Date().toISOString().slice(0, 10);
 
-  const [ventasRes, egresosRes] = await Promise.all([
-    supabase.from('ventas').select('fecha,total,metodo_pago').gte('fecha', desde).lte('fecha', hasta),
-    supabase.from('egresos').select('fecha,monto,categoria').gte('fecha', desde).lte('fecha', hasta)
+  const [ventasRes, egresosRes, clientesNuevosRes, clientesTotalRes] = await Promise.all([
+    supabase.from('ventas').select('fecha,total,metodo_pago,cliente_id').gte('fecha', desde).lte('fecha', hasta),
+    supabase.from('egresos').select('fecha,monto,categoria').gte('fecha', desde).lte('fecha', hasta),
+    supabase.from('clientes').select('id', { count: 'exact', head: true }).gte('created_at', desde).lte('created_at', `${hasta}T23:59:59`),
+    supabase.from('clientes').select('id', { count: 'exact', head: true })
   ]);
 
   if (ventasRes.error) return res.status(500).json({ error: ventasRes.error.message });
   if (egresosRes.error) return res.status(500).json({ error: egresosRes.error.message });
+  if (clientesNuevosRes.error) return res.status(500).json({ error: clientesNuevosRes.error.message });
+  if (clientesTotalRes.error) return res.status(500).json({ error: clientesTotalRes.error.message });
 
   const ventasTotal = ventasRes.data.reduce((s, v) => s + Number(v.total), 0);
   const egresosTotal = egresosRes.data.reduce((s, e) => s + Number(e.monto), 0);
+  const cantidadVentas = ventasRes.data.length;
+  const ticketPromedio = cantidadVentas > 0 ? ventasTotal / cantidadVentas : 0;
 
   const porMetodo = {};
   for (const v of ventasRes.data) {
@@ -599,12 +661,38 @@ app.get('/api/reportes', async (req, res) => {
     porCategoria[c] = (porCategoria[c] || 0) + Number(e.monto);
   }
 
+  const gastoPorCliente = {};
+  for (const v of ventasRes.data) {
+    if (!v.cliente_id) continue;
+    gastoPorCliente[v.cliente_id] = (gastoPorCliente[v.cliente_id] || 0) + Number(v.total);
+  }
+  const topIds = Object.entries(gastoPorCliente).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id]) => id);
+  let topClientes = [];
+  if (topIds.length > 0) {
+    const { data: nombres } = await supabase.from('clientes').select('id,nombre').in('id', topIds);
+    const nombreById = Object.fromEntries((nombres || []).map((c) => [c.id, c.nombre]));
+    topClientes = topIds.map((id) => ({ id, nombre: nombreById[id] || '—', total: gastoPorCliente[id] }));
+  }
+
+  const serieDiariaMap = {};
+  for (const v of ventasRes.data) {
+    (serieDiariaMap[v.fecha] ||= { fecha: v.fecha, ventas: 0, egresos: 0 }).ventas += Number(v.total);
+  }
+  for (const e of egresosRes.data) {
+    (serieDiariaMap[e.fecha] ||= { fecha: e.fecha, ventas: 0, egresos: 0 }).egresos += Number(e.monto);
+  }
+  const serieDiaria = Object.values(serieDiariaMap).sort((a, b) => a.fecha.localeCompare(b.fecha));
+
   res.json({
     desde, hasta,
     ventasTotal, egresosTotal, balance: ventasTotal - egresosTotal,
-    cantidadVentas: ventasRes.data.length,
-    cantidadEgresos: egresosRes.data.length,
-    porMetodo, porCategoria
+    cantidadVentas, cantidadEgresos: egresosRes.data.length,
+    ticketPromedio,
+    clientesNuevos: clientesNuevosRes.count || 0,
+    clientesTotal: clientesTotalRes.count || 0,
+    porMetodo, porCategoria,
+    topClientes,
+    serieDiaria
   });
 });
 

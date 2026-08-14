@@ -1,6 +1,7 @@
 async function apiRequest(method, url, body) {
   const res = await fetch(url, {
     method,
+    cache: 'no-store',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined
   });
@@ -16,7 +17,9 @@ const api = {
     create: (data) => apiRequest('POST', '/api/clientes', data),
     update: (id, data) => apiRequest('PUT', `/api/clientes/${id}`, data),
     remove: (id) => apiRequest('DELETE', `/api/clientes/${id}`),
-    addTratamiento: (id, data) => apiRequest('POST', `/api/clientes/${id}/tratamientos`, data)
+    addTratamiento: (id, data) => apiRequest('POST', `/api/clientes/${id}/tratamientos`, data),
+    puntosHistorial: (id) => apiRequest('GET', `/api/clientes/${id}/puntos`),
+    ajustarPuntos: (id, data) => apiRequest('POST', `/api/clientes/${id}/puntos`, data)
   },
   tratamientos: {
     remove: (id) => apiRequest('DELETE', `/api/tratamientos/${id}`)
