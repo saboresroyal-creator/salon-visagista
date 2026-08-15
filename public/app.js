@@ -3,6 +3,7 @@ const MODULES = [
   { key: 'calendario', label: 'Calendario', render: renderCalendario },
   { key: 'clientes', label: 'Clientes', render: renderClientes },
   { key: 'catalogo', label: 'Servicios & Equipo', render: renderCatalogo },
+  { key: 'stock', label: 'Stock', render: renderStock },
   { key: 'facturacion', label: 'Facturación', render: renderFacturacion },
   { key: 'egresos', label: 'Egresos', render: renderEgresos },
   { key: 'reportes', label: 'Reportes', render: renderReportes },
@@ -58,6 +59,7 @@ function switchView(key) {
 
 async function boot() {
   document.getElementById('logout-btn')?.remove();
+  stopRealtime();
   const container = document.getElementById('view');
   try {
     currentUser = await api.auth.me();
@@ -66,10 +68,12 @@ async function boot() {
     renderNav();
     if (currentView) switchView(currentView);
     else container.innerHTML = '<p>Tu usuario no tiene módulos habilitados. Pedile al administrador que te asigne acceso.</p>';
+    initRealtime();
   } catch (e) {
     currentUser = null;
     renderLogin(container, () => boot());
   }
 }
 
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 boot();

@@ -166,13 +166,23 @@ function openServicioModal(serv, container) {
 
 function openProductoModal(prod, container) {
   const isEdit = !!prod;
-  smallModal(isEdit ? 'Editar producto' : 'Nuevo producto', `
+  const backdrop = smallModal(isEdit ? 'Editar producto' : 'Nuevo producto', `
       <div class="field"><label>Nombre</label><input id="pd-nombre" value="${prod?.nombre || ''}" /></div>
       <div class="row">
         <div class="field"><label>Precio</label><input type="number" id="pd-precio" value="${prod?.precio ?? 0}" /></div>
         <div class="field"><label>Costo</label><input type="number" id="pd-costo" value="${prod?.costo ?? 0}" /></div>
       </div>
-      <div class="field"><label>Stock</label><input type="number" id="pd-stock" value="${prod?.stock ?? 0}" /></div>
+      <div class="row">
+        <div class="field"><label>Stock</label><input type="number" id="pd-stock" value="${prod?.stock ?? 0}" /></div>
+        <div class="field"><label>Stock mínimo</label><input type="number" id="pd-stock-minimo" value="${prod?.stock_minimo ?? 0}" /></div>
+      </div>
+      <div class="field">
+        <label>Código de barras</label>
+        <div class="row" style="align-items:center;">
+          <input id="pd-barcode" value="${prod?.barcode || ''}" style="flex:1;" />
+          <button class="secondary" id="pd-escanear" type="button" title="Escanear código">📷</button>
+        </div>
+      </div>
       <div class="field"><label><input type="checkbox" id="pd-activo" ${prod?.activo !== false ? 'checked' : ''} /> Activo</label></div>
     `,
     async (backdrop, close) => {
@@ -181,6 +191,8 @@ function openProductoModal(prod, container) {
         precio: Number(backdrop.querySelector('#pd-precio').value) || 0,
         costo: Number(backdrop.querySelector('#pd-costo').value) || 0,
         stock: Number(backdrop.querySelector('#pd-stock').value) || 0,
+        stock_minimo: Number(backdrop.querySelector('#pd-stock-minimo').value) || 0,
+        barcode: backdrop.querySelector('#pd-barcode').value.trim() || null,
         activo: backdrop.querySelector('#pd-activo').checked
       };
       if (!payload.nombre) { toast('El nombre es obligatorio', 'err'); return; }
@@ -198,4 +210,7 @@ function openProductoModal(prod, container) {
       catch (e) { toast(e.message, 'err'); }
     } : null
   );
+  backdrop.querySelector('#pd-escanear').onclick = () => {
+    openBarcodeScanner((code) => { backdrop.querySelector('#pd-barcode').value = code; });
+  };
 }

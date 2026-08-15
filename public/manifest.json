@@ -1,0 +1,13 @@
+{
+  "name": "Salón Visagista",
+  "short_name": "Visagista",
+  "description": "Sistema de gestión: calendario, clientes, stock, facturación y más.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f5f3",
+  "theme_color": "#b8895f",
+  "icons": [
+    { "src": "/logo.png", "sizes": "357x361", "type": "image/png", "purpose": "any" }
+  ]
+}

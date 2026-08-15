@@ -43,7 +43,18 @@ const api = {
     list: () => apiRequest('GET', '/api/productos'),
     create: (data) => apiRequest('POST', '/api/productos', data),
     update: (id, data) => apiRequest('PUT', `/api/productos/${id}`, data),
-    remove: (id) => apiRequest('DELETE', `/api/productos/${id}`)
+    remove: (id) => apiRequest('DELETE', `/api/productos/${id}`),
+    buscarBarcode: (codigo) => apiRequest('GET', `/api/productos/buscar-barcode/${encodeURIComponent(codigo)}`)
+  },
+  stock: {
+    alertas: () => apiRequest('GET', '/api/stock/alertas'),
+    movimientos: {
+      list: (producto_id) => apiRequest('GET', `/api/stock/movimientos${producto_id ? `?producto_id=${producto_id}` : ''}`),
+      create: (data) => apiRequest('POST', '/api/stock/movimientos', data)
+    }
+  },
+  config: {
+    realtime: () => apiRequest('GET', '/api/realtime-config')
   },
   turnos: {
     list: (params) => apiRequest('GET', `/api/turnos?${new URLSearchParams(params)}`),

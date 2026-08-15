@@ -20,6 +20,19 @@ const supabase = createClient(supabaseUrl, supabaseServiceRole);
 const supabaseAuthClient = createClient(supabaseUrl, supabaseAnonKey);
 const app = express();
 
+// ── Sincronización en vivo ──
+// El hosting es una función serverless (sin proceso persistente), así que no
+// podemos mantener un socket propio abierto entre dispositivos. En cambio,
+// después de cada escritura relevante mandamos un mensaje corto (sin datos,
+// solo "cambió esta tabla") por un canal de Supabase Realtime Broadcast; el
+// browser se conecta directo a Supabase (bypassea esta función) y al recibirlo
+// vuelve a pedir los datos por la API normal, que ya respeta permisos.
+const syncChannel = supabase.channel('stock-sync');
+syncChannel.subscribe();
+function notifyChange(table) {
+  syncChannel.send({ type: 'broadcast', event: 'change', payload: { table } }).catch(() => {});
+}
+
 app.use(cors());
 app.use(express.json());
 app.use(cookieParser());
@@ -92,7 +105,22 @@ app.post('/api/auth/logout', (req, res) => {
 
 app.get('/api/auth/me', requireAuth, (req, res) => res.json(req.user));
 
+app.get('/api/realtime-config', requireAuth, (req, res) => {
+  res.json({ url: supabaseUrl, anonKey: supabaseAnonKey });
+});
+
 app.use('/api', requireAuth);
+// Igual que productos/clientes: la alerta de stock bajo la puede leer
+// cualquier usuario logueado (por ejemplo, para la card del Dashboard),
+// aunque no tenga permiso de edición del módulo Stock.
+app.get('/api/stock/alertas', async (req, res) => {
+  const { data, error } = await supabase
+    .from('productos').select('*')
+    .eq('activo', true)
+    .order('nombre', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json((data || []).filter((p) => p.stock <= (p.stock_minimo || 0)));
+});
 // Clientes, profesionales, servicios y productos son datos de referencia que
 // necesitan leerse desde varios módulos (Calendario, Facturación, etc.), así
 // que su lectura queda disponible para cualquier usuario logueado. Solo las
@@ -105,6 +133,7 @@ app.use('/api/resumen', requireModule('dashboard'));
 app.use('/api/reportes', requireModule('reportes'));
 app.use('/api/marketing', requireModule('marketing'));
 app.use('/api/mensajes-enviados', requireModule('marketing'));
+app.use('/api/stock', requireModule('stock'));
 app.use('/api/usuarios', requireAdmin);
 
 function normalizePhone(raw) {
@@ -343,6 +372,13 @@ app.get('/api/productos', async (req, res) => {
   res.json(data);
 });
 
+app.get('/api/productos/buscar-barcode/:codigo', async (req, res) => {
+  const { data, error } = await supabase.from('productos').select('*').eq('barcode', req.params.codigo).maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: 'No hay ningún producto con ese código' });
+  res.json(data);
+});
+
 app.post('/api/productos', requireModule('catalogo'), async (req, res) => {
   const nombre = (req.body.nombre || '').trim();
   if (!nombre) return res.status(400).json({ error: 'El nombre es obligatorio' });
@@ -352,21 +388,25 @@ app.post('/api/productos', requireModule('catalogo'), async (req, res) => {
     precio: req.body.precio || 0,
     costo: req.body.costo || 0,
     stock: req.body.stock || 0,
+    stock_minimo: req.body.stock_minimo || 0,
+    barcode: req.body.barcode || null,
     activo: req.body.activo !== false
   };
   const { data, error } = await supabase.from('productos').insert([payload]).select().single();
   if (error) return res.status(500).json({ error: error.message });
+  notifyChange('productos');
   res.json(data);
 });
 
 app.put('/api/productos/:id', requireModule('catalogo'), async (req, res) => {
   const { id } = req.params;
   const payload = {};
-  for (const key of ['nombre', 'precio', 'costo', 'stock', 'activo']) {
+  for (const key of ['nombre', 'precio', 'costo', 'stock', 'stock_minimo', 'barcode', 'activo']) {
     if (req.body[key] !== undefined) payload[key] = req.body[key];
   }
   const { data, error } = await supabase.from('productos').update(payload).eq('id', id).select().single();
   if (error) return res.status(500).json({ error: error.message });
+  notifyChange('productos');
   res.json(data);
 });
 
@@ -374,7 +414,61 @@ app.delete('/api/productos/:id', requireModule('catalogo'), async (req, res) => 
   const { id } = req.params;
   const { error } = await supabase.from('productos').delete().eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
+  notifyChange('productos');
   res.json({ ok: true });
+});
+
+// ── Stock (movimientos con historial + alertas de stock bajo) ──
+app.get('/api/stock/movimientos', async (req, res) => {
+  let query = supabase
+    .from('stock_movimientos')
+    .select('*, productos(id,nombre,barcode)')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (req.query.producto_id) query = query.eq('producto_id', req.query.producto_id);
+  const { data, error } = await query;
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.post('/api/stock/movimientos', async (req, res) => {
+  const { producto_id, tipo, cantidad, motivo } = req.body;
+  if (!producto_id || !['entrada', 'salida', 'ajuste'].includes(tipo)) {
+    return res.status(400).json({ error: 'Producto y tipo de movimiento son obligatorios' });
+  }
+  const cantidadNum = Number(cantidad);
+  if (!Number.isFinite(cantidadNum) || cantidadNum < 0) {
+    return res.status(400).json({ error: 'La cantidad debe ser un número válido' });
+  }
+
+  const { data: producto, error: prodError } = await supabase.from('productos').select('id, stock').eq('id', producto_id).single();
+  if (prodError || !producto) return res.status(404).json({ error: 'Producto no encontrado' });
+
+  const stockAnterior = producto.stock;
+  let stockNuevo;
+  if (tipo === 'entrada') stockNuevo = stockAnterior + cantidadNum;
+  else if (tipo === 'salida') stockNuevo = stockAnterior - cantidadNum;
+  else stockNuevo = cantidadNum;
+
+  if (stockNuevo < 0) return res.status(400).json({ error: 'No hay stock suficiente para esa salida' });
+
+  const { error: updateError } = await supabase.from('productos').update({ stock: stockNuevo }).eq('id', producto_id);
+  if (updateError) return res.status(500).json({ error: updateError.message });
+
+  const { data: movimiento, error: movError } = await supabase
+    .from('stock_movimientos')
+    .insert([{
+      producto_id, tipo, cantidad: cantidadNum,
+      stock_anterior: stockAnterior, stock_nuevo: stockNuevo,
+      motivo: motivo || null, usuario_nombre: req.user.nombre
+    }])
+    .select('*, productos(id,nombre,barcode)')
+    .single();
+  if (movError) return res.status(500).json({ error: movError.message });
+
+  notifyChange('stock_movimientos');
+  notifyChange('productos');
+  res.json(movimiento);
 });
 
 // ── Turnos (calendario) ──

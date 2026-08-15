@@ -2,10 +2,12 @@ async function renderDashboard(container) {
   const fecha = new Date().toISOString().slice(0, 10);
   container.innerHTML = '<p>Cargando...</p>';
 
-  const [resumen, cumpleanos] = await Promise.all([
+  const [resumen, cumpleanos, stockAlertas] = await Promise.all([
     api.resumen.get(fecha),
-    api.marketing.cumpleanos(7)
+    api.marketing.cumpleanos(7),
+    api.stock.alertas()
   ]);
+  if (!container.isConnected) return;
 
   container.innerHTML = `
     <div class="row" style="gap:14px; margin-bottom:16px;">
@@ -24,6 +26,10 @@ async function renderDashboard(container) {
       <div class="card" style="flex:1;">
         <div style="color:var(--muted); font-size:0.8rem;">Balance hoy</div>
         <div style="font-size:1.6rem; font-weight:700; color:${resumen.balance >= 0 ? '#4a7c59' : 'var(--danger)'}">$${resumen.balance.toFixed(2)}</div>
+      </div>
+      <div class="card" id="dash-stock-card" style="flex:1; cursor:pointer;">
+        <div style="color:var(--muted); font-size:0.8rem;">Stock bajo</div>
+        <div style="font-size:1.6rem; font-weight:700; color:${stockAlertas.length > 0 ? 'var(--danger)' : 'inherit'}">${stockAlertas.length}</div>
       </div>
     </div>
 
@@ -62,4 +68,23 @@ async function renderDashboard(container) {
       </div>
     </div>
   `;
+
+  const puedeVerStock = currentUser.rol === 'admin' || (currentUser.permisos || []).includes('stock');
+  if (puedeVerStock) {
+    container.querySelector('#dash-stock-card').onclick = () => switchView('stock');
+  } else {
+    container.querySelector('#dash-stock-card').style.cursor = 'default';
+  }
+
+  onStockChange((table) => {
+    if (!container.isConnected || table !== 'productos') return;
+    api.stock.alertas().then((alertas) => {
+      if (!container.isConnected) return;
+      const el = container.querySelector('#dash-stock-card > div:last-child');
+      if (el) {
+        el.textContent = alertas.length;
+        el.style.color = alertas.length > 0 ? 'var(--danger)' : 'inherit';
+      }
+    });
+  });
 }
