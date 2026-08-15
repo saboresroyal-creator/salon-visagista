@@ -14,7 +14,7 @@ function loadZXingLib() {
   if (_zxingLoadPromise) return _zxingLoadPromise;
   _zxingLoadPromise = new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = 'https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js';
+    s.src = 'https://unpkg.com/@zxing/browser@0.1.5';
     s.onload = resolve;
     s.onerror = () => reject(new Error('No se pudo cargar el lector de códigos'));
     document.head.appendChild(s);
