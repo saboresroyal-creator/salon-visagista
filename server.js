@@ -76,6 +76,15 @@ function requireModule(key) {
   };
 }
 
+// Para acciones que ambos módulos necesitan (ej: gestionar productos desde
+// Stock además de desde Catálogo), alcanza con tener el permiso de cualquiera.
+function requireAnyModule(...keys) {
+  return (req, res, next) => {
+    if (req.user.rol === 'admin' || keys.some((k) => (req.user.permisos || []).includes(k))) return next();
+    res.status(403).json({ error: 'No tenés permiso para acceder a este módulo' });
+  };
+}
+
 function requireAdmin(req, res, next) {
   if (req.user.rol === 'admin') return next();
   res.status(403).json({ error: 'Solo el administrador puede hacer esto' });
@@ -379,7 +388,7 @@ app.get('/api/productos/buscar-barcode/:codigo', async (req, res) => {
   res.json(data);
 });
 
-app.post('/api/productos', requireModule('catalogo'), async (req, res) => {
+app.post('/api/productos', requireAnyModule('catalogo', 'stock'), async (req, res) => {
   const nombre = (req.body.nombre || '').trim();
   if (!nombre) return res.status(400).json({ error: 'El nombre es obligatorio' });
 
@@ -398,7 +407,7 @@ app.post('/api/productos', requireModule('catalogo'), async (req, res) => {
   res.json(data);
 });
 
-app.put('/api/productos/:id', requireModule('catalogo'), async (req, res) => {
+app.put('/api/productos/:id', requireAnyModule('catalogo', 'stock'), async (req, res) => {
   const { id } = req.params;
   const payload = {};
   for (const key of ['nombre', 'precio', 'costo', 'stock', 'stock_minimo', 'barcode', 'activo']) {
@@ -410,7 +419,7 @@ app.put('/api/productos/:id', requireModule('catalogo'), async (req, res) => {
   res.json(data);
 });
 
-app.delete('/api/productos/:id', requireModule('catalogo'), async (req, res) => {
+app.delete('/api/productos/:id', requireAnyModule('catalogo', 'stock'), async (req, res) => {
   const { id } = req.params;
   const { error } = await supabase.from('productos').delete().eq('id', id);
   if (error) return res.status(500).json({ error: error.message });

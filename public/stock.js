@@ -59,11 +59,37 @@ function renderStockView(container, productos, alertas, movimientos) {
         <tbody>${list.map((p) => `
           <tr data-id="${p.id}" ${p.stock <= (p.stock_minimo || 0) ? 'class="stock-bajo"' : ''}>
             <td>${p.nombre}</td><td>${p.stock}</td><td>${p.stock_minimo || 0}</td><td>${p.barcode || '—'}</td>
-            <td><button class="secondary st-mov-btn" data-id="${p.id}" type="button">Movimiento</button></td>
+            <td style="white-space:nowrap;">
+              <button class="secondary st-mov-btn" data-id="${p.id}" type="button">Movimiento</button>
+              ${p.barcode ? `<button class="secondary st-quitar-codigo-btn" data-id="${p.id}" type="button" title="Quitar código de barras">Quitar código</button>` : ''}
+              <button class="danger st-eliminar-btn" data-id="${p.id}" type="button" title="Eliminar producto">🗑</button>
+            </td>
           </tr>`).join('')}</tbody>
       </table>`;
     box.querySelectorAll('.st-mov-btn').forEach((btn) => {
       btn.onclick = () => openMovimientoModal(list.find((x) => x.id === btn.dataset.id), container, activos);
+    });
+    box.querySelectorAll('.st-quitar-codigo-btn').forEach((btn) => {
+      btn.onclick = async () => {
+        const p = list.find((x) => x.id === btn.dataset.id);
+        if (!confirm(`¿Quitar el código de barras de "${p.nombre}"?`)) return;
+        try {
+          await api.productos.update(p.id, { barcode: null });
+          toast('Código quitado');
+          reloadStock(container, false);
+        } catch (e) { toast(e.message, 'err'); }
+      };
+    });
+    box.querySelectorAll('.st-eliminar-btn').forEach((btn) => {
+      btn.onclick = async () => {
+        const p = list.find((x) => x.id === btn.dataset.id);
+        if (!confirm(`¿Eliminar el producto "${p.nombre}"? Esta acción no se puede deshacer.`)) return;
+        try {
+          await api.productos.remove(p.id);
+          toast('Producto eliminado');
+          reloadStock(container, false);
+        } catch (e) { toast(e.message, 'err'); }
+      };
     });
   };
   renderProductos(activos);

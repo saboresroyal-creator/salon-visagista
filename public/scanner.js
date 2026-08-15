@@ -4,6 +4,11 @@
    @zxing/browser por CDN como respaldo (Safari / navegadores sin soporte nativo). */
 
 const BARCODE_FORMATS_NATIVE = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'codabar', 'itf', 'qr_code'];
+// Formatos de código de barras "de producto" (no QR). Si el lector nativo del
+// celular no soporta ninguno de estos, no sirve para escanear productos
+// aunque sí sepa leer QR — hay que usar el lector de respaldo (ZXing) en vez
+// de quedarse en el nativo solo porque detectó soporte para QR.
+const RETAIL_BARCODE_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'codabar', 'itf'];
 let _scanStream = null;
 let _scanPollTimer = null;
 let _zxingControls = null;
@@ -60,8 +65,9 @@ function startScanner(onDetected, setStatus) {
   if (window.BarcodeDetector) {
     BarcodeDetector.getSupportedFormats().then((supported) => {
       if (decided) return; decided = true; clearTimeout(fallbackTimer);
+      const soportaCodigoDeProducto = RETAIL_BARCODE_FORMATS.some((f) => supported.includes(f));
       const wanted = BARCODE_FORMATS_NATIVE.filter((f) => supported.includes(f));
-      if (wanted.length) startScannerNative(wanted, onDetected, setStatus);
+      if (soportaCodigoDeProducto && wanted.length) startScannerNative(wanted, onDetected, setStatus);
       else startScannerZXing(onDetected, setStatus);
     }).catch(() => { if (decided) return; decided = true; clearTimeout(fallbackTimer); startScannerZXing(onDetected, setStatus); });
   } else {
