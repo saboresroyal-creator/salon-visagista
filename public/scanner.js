@@ -70,9 +70,16 @@ function startScanner(onDetected, setStatus) {
   }
 }
 
+const CAMERA_CONSTRAINTS = {
+  facingMode: 'environment',
+  width: { ideal: 1920 },
+  height: { ideal: 1080 },
+  advanced: [{ focusMode: 'continuous' }]
+};
+
 function startScannerNative(formats, onDetected, setStatus) {
   const video = document.getElementById('scan-video');
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } }).then((stream) => {
+  navigator.mediaDevices.getUserMedia({ video: CAMERA_CONSTRAINTS }).then((stream) => {
     _scanStream = stream;
     video.srcObject = stream;
     video.play().catch(() => {});
@@ -94,9 +101,19 @@ function startScannerNative(formats, onDetected, setStatus) {
 function startScannerZXing(onDetected, setStatus) {
   const video = document.getElementById('scan-video');
   loadZXingLib().then(() => {
-    const codeReader = new ZXingBrowser.BrowserMultiFormatReader();
+    let hints;
+    try {
+      if (ZXingBrowser.DecodeHintType && ZXingBrowser.BarcodeFormat) {
+        const F = ZXingBrowser.BarcodeFormat;
+        hints = new Map();
+        hints.set(ZXingBrowser.DecodeHintType.POSSIBLE_FORMATS, [
+          F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.CODABAR, F.ITF, F.QR_CODE
+        ]);
+      }
+    } catch (e) {}
+    const codeReader = new ZXingBrowser.BrowserMultiFormatReader(hints);
     codeReader.decodeFromConstraints(
-      { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } },
+      { video: CAMERA_CONSTRAINTS },
       video,
       (result) => { if (result) onDetected(result.getText()); }
     ).then((controls) => { _zxingControls = controls; })
