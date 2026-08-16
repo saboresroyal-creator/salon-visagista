@@ -1,3 +1,13 @@
+// Roles disponibles. Los permisos de cada rol ya no se tildan por usuario:
+// se administran centralizados en la pantalla "Permisos por Rol".
+const ROLES = [
+  { key: 'admin', label: 'Administrador' },
+  { key: 'profesional', label: 'Profesional' },
+  { key: 'recepcionista', label: 'Recepcionista' },
+  { key: 'cajero', label: 'Cajero' },
+  { key: 'encargada', label: 'Encargada / Gerencia' }
+];
+
 async function renderUsuarios(container) {
   container.innerHTML = `
     <div class="cal-toolbar">
@@ -16,14 +26,13 @@ async function loadUsuarios(container) {
     const usuarios = await api.usuarios.list();
     box.innerHTML = `
       <table class="data-table">
-        <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Módulos</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th></tr></thead>
         <tbody>
           ${usuarios.map((u) => `
             <tr data-id="${u.id}">
               <td>${u.nombre}</td>
               <td>${u.email || ''}</td>
-              <td>${u.rol === 'admin' ? 'Administrador' : 'Usuario'}</td>
-              <td>${u.rol === 'admin' ? 'Todos' : (u.permisos || []).map((p) => MODULES.find((m) => m.key === p)?.label || p).join(', ') || '—'}</td>
+              <td>${ROLES.find((r) => r.key === u.rol)?.label || u.rol}</td>
               <td>${u.activo === false ? 'Inactivo' : 'Activo'}</td>
             </tr>
           `).join('')}
@@ -43,7 +52,6 @@ async function loadUsuarios(container) {
 
 function openUsuarioModal(usuario, container) {
   const isEdit = !!usuario;
-  const permisosActuales = usuario?.permisos || [];
 
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
@@ -64,19 +72,9 @@ function openUsuarioModal(usuario, container) {
       <div class="field">
         <label>Rol</label>
         <select id="um-rol">
-          <option value="usuario" ${usuario?.rol !== 'admin' ? 'selected' : ''}>Usuario (acceso por módulo)</option>
-          <option value="admin" ${usuario?.rol === 'admin' ? 'selected' : ''}>Administrador (acceso total)</option>
+          ${ROLES.map((r) => `<option value="${r.key}" ${(usuario?.rol || 'profesional') === r.key ? 'selected' : ''}>${r.label}</option>`).join('')}
         </select>
-      </div>
-
-      <div class="field" id="um-permisos-field">
-        <label>Módulos permitidos</label>
-        ${MODULES.map((m) => `
-          <label style="display:flex; align-items:center; gap:6px; font-size:0.88rem; font-weight:normal; margin-bottom:4px;">
-            <input type="checkbox" data-modulo="${m.key}" ${permisosActuales.includes(m.key) ? 'checked' : ''} />
-            ${m.label}
-          </label>
-        `).join('')}
+        <p style="font-size:0.78rem; color:var(--muted); margin:4px 0 0;">Qué puede hacer cada rol se administra en "Permisos por Rol".</p>
       </div>
 
       ${isEdit ? `
@@ -95,18 +93,11 @@ function openUsuarioModal(usuario, container) {
   backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
   backdrop.querySelector('#um-cancelar').onclick = close;
 
-  const permisosField = backdrop.querySelector('#um-permisos-field');
-  const rolSelect = backdrop.querySelector('#um-rol');
-  const toggleField = () => { permisosField.style.display = rolSelect.value === 'admin' ? 'none' : 'block'; };
-  toggleField();
-  rolSelect.onchange = toggleField;
-
   backdrop.querySelector('#um-guardar').onclick = async () => {
     const nombre = backdrop.querySelector('#um-nombre').value.trim();
     const email = backdrop.querySelector('#um-email').value.trim();
     const password = backdrop.querySelector('#um-password').value;
-    const rol = rolSelect.value;
-    const permisos = [...backdrop.querySelectorAll('[data-modulo]:checked')].map((el) => el.dataset.modulo);
+    const rol = backdrop.querySelector('#um-rol').value;
 
     if (!nombre || (!isEdit && (!email || !password))) {
       toast('Completá nombre, email y contraseña', 'err');
@@ -115,11 +106,11 @@ function openUsuarioModal(usuario, container) {
 
     try {
       if (isEdit) {
-        const payload = { nombre, rol, permisos, activo: backdrop.querySelector('#um-activo').checked };
+        const payload = { nombre, rol, activo: backdrop.querySelector('#um-activo').checked };
         if (password) payload.password = password;
         await api.usuarios.update(usuario.id, payload);
       } else {
-        await api.usuarios.create({ nombre, email, password, rol, permisos });
+        await api.usuarios.create({ nombre, email, password, rol });
       }
       toast('Usuario guardado');
       close();

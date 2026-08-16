@@ -99,6 +99,11 @@ const api = {
     create: (data) => apiRequest('POST', '/api/usuarios', data),
     update: (id, data) => apiRequest('PUT', `/api/usuarios/${id}`, data),
     remove: (id) => apiRequest('DELETE', `/api/usuarios/${id}`)
+  },
+  rolPermisos: {
+    list: () => apiRequest('GET', '/api/rol-permisos'),
+    create: (data) => apiRequest('POST', '/api/rol-permisos', data),
+    remove: (id) => apiRequest('DELETE', `/api/rol-permisos/${id}`)
   }
 };
 

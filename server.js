@@ -65,23 +65,31 @@ async function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'Tu usuario no tiene un perfil activo en el sistema' });
   }
 
-  req.user = { id: userData.user.id, email: userData.user.email, nombre: perfil.nombre, rol: perfil.rol, permisos: perfil.permisos || [] };
+  // Los permisos se administran por rol (pantalla "Permisos por Rol"), no
+  // por usuario: admin no necesita filas, bypasea todo en requirePermiso.
+  let permisos = [];
+  if (perfil.rol !== 'admin') {
+    const { data: rp } = await supabase.from('rol_permisos').select('permiso').eq('rol', perfil.rol);
+    permisos = (rp || []).map((r) => r.permiso);
+  }
+
+  req.user = { id: userData.user.id, email: userData.user.email, nombre: perfil.nombre, rol: perfil.rol, permisos };
   next();
 }
 
-function requireModule(key) {
+function requirePermiso(clave) {
   return (req, res, next) => {
-    if (req.user.rol === 'admin' || (req.user.permisos || []).includes(key)) return next();
-    res.status(403).json({ error: 'No tenés permiso para acceder a este módulo' });
+    if (req.user.rol === 'admin' || req.user.permisos.includes(clave)) return next();
+    res.status(403).json({ error: 'No tenés permiso para hacer esto' });
   };
 }
 
-// Para acciones que ambos módulos necesitan (ej: gestionar productos desde
-// Stock además de desde Catálogo), alcanza con tener el permiso de cualquiera.
-function requireAnyModule(...keys) {
+// Para acciones que más de un permiso habilita (ej: gestionar productos
+// desde Stock además de desde Catálogo), alcanza con tener cualquiera.
+function requireAnyPermiso(...claves) {
   return (req, res, next) => {
-    if (req.user.rol === 'admin' || keys.some((k) => (req.user.permisos || []).includes(k))) return next();
-    res.status(403).json({ error: 'No tenés permiso para acceder a este módulo' });
+    if (req.user.rol === 'admin' || claves.some((c) => req.user.permisos.includes(c))) return next();
+    res.status(403).json({ error: 'No tenés permiso para hacer esto' });
   };
 }
 
@@ -132,18 +140,13 @@ app.get('/api/stock/alertas', async (req, res) => {
 });
 // Clientes, profesionales, servicios y productos son datos de referencia que
 // necesitan leerse desde varios módulos (Calendario, Facturación, etc.), así
-// que su lectura queda disponible para cualquier usuario logueado. Solo las
-// operaciones de edición quedan detrás del permiso del módulo dueño del dato.
-app.use('/api/agenda', requireModule('calendario'));
-app.use('/api/turnos', requireModule('calendario'));
-app.use('/api/ventas', requireAnyModule('facturacion', 'comandas'));
-app.use('/api/egresos', requireModule('egresos'));
-app.use('/api/resumen', requireModule('dashboard'));
-app.use('/api/reportes', requireModule('reportes'));
-app.use('/api/marketing', requireModule('marketing'));
-app.use('/api/mensajes-enviados', requireModule('marketing'));
-app.use('/api/stock', requireModule('stock'));
+// que su lectura queda disponible para cualquier usuario logueado. El resto
+// de las rutas de cada módulo se gatean individualmente más abajo, con el
+// permiso granular que corresponda (ver/gestionar/eliminar/etc).
+app.use('/api/resumen', requirePermiso('dashboard:ver'));
+app.use('/api/reportes', requirePermiso('reportes:ver'));
 app.use('/api/usuarios', requireAdmin);
+app.use('/api/rol-permisos', requireAdmin);
 
 function normalizePhone(raw) {
   let digits = (raw || '').replace(/\D/g, '');
@@ -204,7 +207,7 @@ app.post('/api/clientes', async (req, res) => {
   res.json(data);
 });
 
-app.put('/api/clientes/:id', requireModule('clientes'), async (req, res) => {
+app.put('/api/clientes/:id', requirePermiso('clientes:gestionar'), async (req, res) => {
   const { id } = req.params;
   const payload = pickClienteFields(req.body);
   if (payload.nombre !== undefined && !payload.nombre.trim()) {
@@ -216,7 +219,7 @@ app.put('/api/clientes/:id', requireModule('clientes'), async (req, res) => {
   res.json(data);
 });
 
-app.delete('/api/clientes/:id', requireModule('clientes'), async (req, res) => {
+app.delete('/api/clientes/:id', requirePermiso('clientes:eliminar'), async (req, res) => {
   const { id } = req.params;
   const { error } = await supabase.from('clientes').delete().eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
@@ -224,7 +227,7 @@ app.delete('/api/clientes/:id', requireModule('clientes'), async (req, res) => {
 });
 
 // ── Agenda ──
-app.get('/api/agenda', async (req, res) => {
+app.get('/api/agenda', requirePermiso('calendario:ver'), async (req, res) => {
   const { data, error } = await supabase
     .from('clientes')
     .select('id, nombre, telefono, proxima_cita_fecha, proxima_cita_hora, dias_aviso, msg_recordatorio')
@@ -237,7 +240,7 @@ app.get('/api/agenda', async (req, res) => {
 });
 
 // ── Tratamientos ──
-app.post('/api/clientes/:id/tratamientos', requireModule('clientes'), async (req, res) => {
+app.post('/api/clientes/:id/tratamientos', requirePermiso('clientes:gestionar'), async (req, res) => {
   const { id } = req.params;
   const fecha = req.body.fecha;
   if (!fecha) return res.status(400).json({ error: 'La fecha es obligatoria' });
@@ -256,7 +259,7 @@ app.post('/api/clientes/:id/tratamientos', requireModule('clientes'), async (req
   res.json(data);
 });
 
-app.delete('/api/tratamientos/:id', requireModule('clientes'), async (req, res) => {
+app.delete('/api/tratamientos/:id', requirePermiso('clientes:gestionar'), async (req, res) => {
   const { id } = req.params;
   const { error } = await supabase.from('tratamientos').delete().eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
@@ -272,7 +275,7 @@ app.get('/api/clientes/:id/puntos', async (req, res) => {
   res.json(data);
 });
 
-app.post('/api/clientes/:id/puntos', requireModule('clientes'), async (req, res) => {
+app.post('/api/clientes/:id/puntos', requirePermiso('clientes:puntos'), async (req, res) => {
   const { id } = req.params;
   const puntos = Number(req.body.puntos);
   if (!Number.isInteger(puntos) || puntos === 0) {
@@ -304,7 +307,7 @@ app.get('/api/clientes/:id/cuenta-corriente', async (req, res) => {
   res.json(data);
 });
 
-app.post('/api/clientes/:id/cuenta-corriente', requireModule('clientes'), async (req, res) => {
+app.post('/api/clientes/:id/cuenta-corriente', requirePermiso('clientes:cuenta_corriente'), async (req, res) => {
   const { id } = req.params;
   const monto = Number(req.body.monto);
   if (!Number.isFinite(monto) || monto === 0) {
@@ -338,7 +341,7 @@ app.get('/api/profesionales', async (req, res) => {
   res.json(data);
 });
 
-app.post('/api/profesionales', requireModule('catalogo'), async (req, res) => {
+app.post('/api/profesionales', requirePermiso('catalogo:gestionar'), async (req, res) => {
   const nombre = (req.body.nombre || '').trim();
   if (!nombre) return res.status(400).json({ error: 'El nombre es obligatorio' });
 
@@ -348,7 +351,7 @@ app.post('/api/profesionales', requireModule('catalogo'), async (req, res) => {
   res.json(data);
 });
 
-app.put('/api/profesionales/:id', requireModule('catalogo'), async (req, res) => {
+app.put('/api/profesionales/:id', requirePermiso('catalogo:gestionar'), async (req, res) => {
   const { id } = req.params;
   const payload = {};
   for (const key of ['nombre', 'color', 'activo']) {
@@ -359,7 +362,7 @@ app.put('/api/profesionales/:id', requireModule('catalogo'), async (req, res) =>
   res.json(data);
 });
 
-app.delete('/api/profesionales/:id', requireModule('catalogo'), async (req, res) => {
+app.delete('/api/profesionales/:id', requirePermiso('catalogo:eliminar'), async (req, res) => {
   const { id } = req.params;
   const { error } = await supabase.from('profesionales').delete().eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
@@ -374,7 +377,7 @@ app.get('/api/servicios', async (req, res) => {
   res.json(data);
 });
 
-app.post('/api/servicios', requireModule('catalogo'), async (req, res) => {
+app.post('/api/servicios', requirePermiso('catalogo:gestionar'), async (req, res) => {
   const nombre = (req.body.nombre || '').trim();
   if (!nombre) return res.status(400).json({ error: 'El nombre es obligatorio' });
 
@@ -390,7 +393,7 @@ app.post('/api/servicios', requireModule('catalogo'), async (req, res) => {
   res.json(data);
 });
 
-app.put('/api/servicios/:id', requireModule('catalogo'), async (req, res) => {
+app.put('/api/servicios/:id', requirePermiso('catalogo:gestionar'), async (req, res) => {
   const { id } = req.params;
   const payload = {};
   for (const key of ['nombre', 'categoria', 'duracion_min', 'precio', 'activo']) {
@@ -401,7 +404,7 @@ app.put('/api/servicios/:id', requireModule('catalogo'), async (req, res) => {
   res.json(data);
 });
 
-app.delete('/api/servicios/:id', requireModule('catalogo'), async (req, res) => {
+app.delete('/api/servicios/:id', requirePermiso('catalogo:eliminar'), async (req, res) => {
   const { id } = req.params;
   const { error } = await supabase.from('servicios').delete().eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
@@ -423,7 +426,7 @@ app.get('/api/productos/buscar-barcode/:codigo', async (req, res) => {
   res.json(data);
 });
 
-app.post('/api/productos', requireAnyModule('catalogo', 'stock'), async (req, res) => {
+app.post('/api/productos', requireAnyPermiso('catalogo:gestionar', 'stock:movimientos'), async (req, res) => {
   const nombre = (req.body.nombre || '').trim();
   if (!nombre) return res.status(400).json({ error: 'El nombre es obligatorio' });
 
@@ -442,7 +445,7 @@ app.post('/api/productos', requireAnyModule('catalogo', 'stock'), async (req, re
   res.json(data);
 });
 
-app.put('/api/productos/:id', requireAnyModule('catalogo', 'stock'), async (req, res) => {
+app.put('/api/productos/:id', requireAnyPermiso('catalogo:gestionar', 'stock:movimientos'), async (req, res) => {
   const { id } = req.params;
   const payload = {};
   for (const key of ['nombre', 'precio', 'costo', 'stock', 'stock_minimo', 'barcode', 'activo']) {
@@ -454,7 +457,7 @@ app.put('/api/productos/:id', requireAnyModule('catalogo', 'stock'), async (req,
   res.json(data);
 });
 
-app.delete('/api/productos/:id', requireAnyModule('catalogo', 'stock'), async (req, res) => {
+app.delete('/api/productos/:id', requireAnyPermiso('catalogo:eliminar', 'stock:eliminar'), async (req, res) => {
   const { id } = req.params;
   const { error } = await supabase.from('productos').delete().eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
@@ -463,7 +466,7 @@ app.delete('/api/productos/:id', requireAnyModule('catalogo', 'stock'), async (r
 });
 
 // ── Stock (movimientos con historial + alertas de stock bajo) ──
-app.get('/api/stock/movimientos', async (req, res) => {
+app.get('/api/stock/movimientos', requirePermiso('stock:ver'), async (req, res) => {
   let query = supabase
     .from('stock_movimientos')
     .select('*, productos(id,nombre,barcode)')
@@ -475,7 +478,7 @@ app.get('/api/stock/movimientos', async (req, res) => {
   res.json(data);
 });
 
-app.post('/api/stock/movimientos', async (req, res) => {
+app.post('/api/stock/movimientos', requirePermiso('stock:movimientos'), async (req, res) => {
   const { producto_id, tipo, cantidad, motivo } = req.body;
   if (!producto_id || !['entrada', 'salida', 'ajuste'].includes(tipo)) {
     return res.status(400).json({ error: 'Producto y tipo de movimiento son obligatorios' });
@@ -518,7 +521,7 @@ app.post('/api/stock/movimientos', async (req, res) => {
 // ── Turnos (calendario) ──
 const TURNO_SELECT = '*, clientes(id,nombre,telefono), profesionales(id,nombre,color), turno_servicios(id,precio,servicios(id,nombre,categoria))';
 
-app.get('/api/turnos', async (req, res) => {
+app.get('/api/turnos', requirePermiso('calendario:ver'), async (req, res) => {
   const { desde, hasta, profesional_id } = req.query;
   let query = supabase.from('turnos').select(TURNO_SELECT).order('fecha', { ascending: true }).order('hora_inicio', { ascending: true });
   if (desde) query = query.gte('fecha', desde);
@@ -530,14 +533,14 @@ app.get('/api/turnos', async (req, res) => {
   res.json(data);
 });
 
-app.get('/api/turnos/:id', async (req, res) => {
+app.get('/api/turnos/:id', requirePermiso('calendario:ver'), async (req, res) => {
   const { id } = req.params;
   const { data, error } = await supabase.from('turnos').select(TURNO_SELECT).eq('id', id).single();
   if (error) return res.status(404).json({ error: 'Turno no encontrado' });
   res.json(data);
 });
 
-app.post('/api/turnos', async (req, res) => {
+app.post('/api/turnos', requirePermiso('calendario:gestionar'), async (req, res) => {
   const { cliente_id, profesional_id, fecha, hora_inicio, hora_fin, servicios } = req.body;
   if (!cliente_id || !profesional_id || !fecha || !hora_inicio || !hora_fin) {
     return res.status(400).json({ error: 'cliente_id, profesional_id, fecha, hora_inicio y hora_fin son obligatorios' });
@@ -564,7 +567,7 @@ app.post('/api/turnos', async (req, res) => {
   res.json(full);
 });
 
-app.put('/api/turnos/:id', async (req, res) => {
+app.put('/api/turnos/:id', requirePermiso('calendario:gestionar'), async (req, res) => {
   const { id } = req.params;
   const payload = {};
   for (const key of ['cliente_id', 'profesional_id', 'fecha', 'hora_inicio', 'hora_fin', 'estado', 'notas']) {
@@ -592,7 +595,7 @@ app.put('/api/turnos/:id', async (req, res) => {
   res.json(full);
 });
 
-app.delete('/api/turnos/:id', async (req, res) => {
+app.delete('/api/turnos/:id', requirePermiso('calendario:gestionar'), async (req, res) => {
   const { id } = req.params;
   const { error } = await supabase.from('turnos').delete().eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
@@ -681,7 +684,7 @@ async function guardarPagos(ventaId, pagos, clienteId) {
   return pagos.length > 1 ? 'Mixto' : pagos[0].metodo;
 }
 
-app.get('/api/ventas', async (req, res) => {
+app.get('/api/ventas', requirePermiso('facturacion:ver'), async (req, res) => {
   const { desde, hasta, estado } = req.query;
   let query = supabase.from('ventas').select(VENTA_SELECT).order('fecha', { ascending: false }).order('created_at', { ascending: false });
   if (desde) query = query.gte('fecha', desde);
@@ -693,7 +696,7 @@ app.get('/api/ventas', async (req, res) => {
   res.json(data);
 });
 
-app.get('/api/ventas/:id', async (req, res) => {
+app.get('/api/ventas/:id', requirePermiso('facturacion:ver'), async (req, res) => {
   const { data, error } = await supabase.from('ventas').select(VENTA_SELECT).eq('id', req.params.id).single();
   if (error) return res.status(404).json({ error: 'Venta no encontrada' });
   res.json(data);
@@ -705,6 +708,13 @@ app.post('/api/ventas', async (req, res) => {
     return res.status(400).json({ error: 'La venta necesita al menos un ítem' });
   }
   const estado = req.body.estado === 'pendiente' ? 'pendiente' : 'cobrada';
+  // El permiso depende de qué se está creando: una comanda pendiente (la
+  // carga cualquiera con permiso de Comandas) o una venta ya cobrada en el
+  // momento (requiere permiso de Facturación para crear directo).
+  const permisoRequerido = estado === 'pendiente' ? 'comandas:crear' : 'facturacion:crear';
+  if (req.user.rol !== 'admin' && !req.user.permisos.includes(permisoRequerido)) {
+    return res.status(403).json({ error: 'No tenés permiso para hacer esto' });
+  }
 
   const itemRows = items.map((it) => ({
     tipo: it.tipo,
@@ -762,7 +772,7 @@ app.post('/api/ventas', async (req, res) => {
   res.json(full);
 });
 
-app.put('/api/ventas/:id/cobrar', requireModule('facturacion'), async (req, res) => {
+app.put('/api/ventas/:id/cobrar', requirePermiso('facturacion:cobrar'), async (req, res) => {
   const { id } = req.params;
   const { data: venta, error: ventaError } = await supabase.from('ventas').select('*').eq('id', id).single();
   if (ventaError || !venta) return res.status(404).json({ error: 'Venta no encontrada' });
@@ -783,7 +793,7 @@ app.put('/api/ventas/:id/cobrar', requireModule('facturacion'), async (req, res)
   res.json(full);
 });
 
-app.delete('/api/ventas/:id', requireModule('facturacion'), async (req, res) => {
+app.delete('/api/ventas/:id', requirePermiso('facturacion:eliminar'), async (req, res) => {
   const { id } = req.params;
 
   const { data: movimientos } = await supabase
@@ -814,7 +824,7 @@ app.delete('/api/ventas/:id', requireModule('facturacion'), async (req, res) => 
 });
 
 // ── Egresos / Compras ──
-app.get('/api/egresos', async (req, res) => {
+app.get('/api/egresos', requirePermiso('egresos:ver'), async (req, res) => {
   const { desde, hasta } = req.query;
   let query = supabase.from('egresos').select('*').order('fecha', { ascending: false });
   if (desde) query = query.gte('fecha', desde);
@@ -825,7 +835,7 @@ app.get('/api/egresos', async (req, res) => {
   res.json(data);
 });
 
-app.post('/api/egresos', async (req, res) => {
+app.post('/api/egresos', requirePermiso('egresos:gestionar'), async (req, res) => {
   const concepto = (req.body.concepto || '').trim();
   const monto = Number(req.body.monto);
   if (!concepto || !monto) return res.status(400).json({ error: 'Concepto y monto son obligatorios' });
@@ -841,7 +851,7 @@ app.post('/api/egresos', async (req, res) => {
   res.json(data);
 });
 
-app.put('/api/egresos/:id', async (req, res) => {
+app.put('/api/egresos/:id', requirePermiso('egresos:gestionar'), async (req, res) => {
   const payload = {};
   for (const key of ['concepto', 'monto', 'categoria', 'fecha']) {
     if (req.body[key] !== undefined) payload[key] = req.body[key];
@@ -851,7 +861,7 @@ app.put('/api/egresos/:id', async (req, res) => {
   res.json(data);
 });
 
-app.delete('/api/egresos/:id', async (req, res) => {
+app.delete('/api/egresos/:id', requirePermiso('egresos:eliminar'), async (req, res) => {
   const { error } = await supabase.from('egresos').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
@@ -960,7 +970,7 @@ app.get('/api/reportes', async (req, res) => {
 });
 
 // ── Marketing ──
-app.get('/api/marketing/recordatorios', async (req, res) => {
+app.get('/api/marketing/recordatorios', requirePermiso('marketing:ver'), async (req, res) => {
   const { data, error } = await supabase
     .from('clientes')
     .select('id,nombre,telefono,proxima_cita_fecha,proxima_cita_hora,dias_aviso,msg_recordatorio')
@@ -979,6 +989,9 @@ app.get('/api/marketing/recordatorios', async (req, res) => {
   res.json(pendientes);
 });
 
+// Sin gate: el Dashboard también usa este endpoint para la card de
+// cumpleaños próximos, y no todos los roles con acceso al Dashboard tienen
+// por qué tener permiso de Marketing.
 app.get('/api/marketing/cumpleanos', async (req, res) => {
   const dias = Number(req.query.dias) || 7;
   const { data, error } = await supabase
@@ -1004,7 +1017,7 @@ app.get('/api/marketing/cumpleanos', async (req, res) => {
   res.json(proximos);
 });
 
-app.post('/api/mensajes-enviados', async (req, res) => {
+app.post('/api/mensajes-enviados', requirePermiso('marketing:enviar'), async (req, res) => {
   const { cliente_id, tipo, mensaje } = req.body;
   if (!cliente_id || !tipo) return res.status(400).json({ error: 'cliente_id y tipo son obligatorios' });
 
@@ -1046,7 +1059,7 @@ app.post('/api/usuarios', async (req, res) => {
     .insert([{
       id: created.user.id,
       nombre,
-      rol: req.body.rol === 'admin' ? 'admin' : 'usuario',
+      rol: ['admin', 'profesional', 'recepcionista', 'encargada', 'cajero'].includes(req.body.rol) ? req.body.rol : 'usuario',
       permisos: Array.isArray(req.body.permisos) ? req.body.permisos : []
     }])
     .select().single();
@@ -1062,7 +1075,7 @@ app.post('/api/usuarios', async (req, res) => {
 app.put('/api/usuarios/:id', async (req, res) => {
   const { id } = req.params;
   const payload = {};
-  for (const key of ['nombre', 'rol', 'permisos', 'activo']) {
+  for (const key of ['nombre', 'rol', 'activo']) {
     if (req.body[key] !== undefined) payload[key] = req.body[key];
   }
 
@@ -1086,6 +1099,31 @@ app.delete('/api/usuarios/:id', async (req, res) => {
   if (id === req.user.id) return res.status(400).json({ error: 'No podés eliminar tu propio usuario' });
 
   const { error } = await supabase.auth.admin.deleteUser(id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+// ── Permisos por rol ──
+app.get('/api/rol-permisos', async (req, res) => {
+  const { data, error } = await supabase.from('rol_permisos').select('*').order('rol', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.post('/api/rol-permisos', async (req, res) => {
+  const { rol, permiso } = req.body;
+  if (!rol || !permiso) return res.status(400).json({ error: 'Rol y permiso son obligatorios' });
+
+  const { data, error } = await supabase
+    .from('rol_permisos')
+    .insert([{ rol, permiso }])
+    .select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.delete('/api/rol-permisos/:id', async (req, res) => {
+  const { error } = await supabase.from('rol_permisos').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });

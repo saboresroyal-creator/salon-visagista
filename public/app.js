@@ -1,22 +1,28 @@
+// Cada módulo se muestra si el usuario tiene su permiso de "ver"; los
+// permisos en sí (uno o varios por módulo) se administran centralizados
+// en Permisos por Rol, ya no se tildan por usuario.
 const MODULES = [
-  { key: 'dashboard', label: 'Panel de Control', render: renderDashboard },
-  { key: 'calendario', label: 'Calendario', render: renderCalendario },
-  { key: 'clientes', label: 'Clientes', render: renderClientes },
-  { key: 'catalogo', label: 'Servicios & Equipo', render: renderCatalogo },
-  { key: 'stock', label: 'Stock', render: renderStock },
-  { key: 'comandas', label: 'Comandas', render: renderComandas },
-  { key: 'facturacion', label: 'Facturación', render: renderFacturacion },
-  { key: 'egresos', label: 'Egresos', render: renderEgresos },
-  { key: 'reportes', label: 'Reportes', render: renderReportes },
-  { key: 'marketing', label: 'Marketing', render: renderMarketing }
+  { key: 'dashboard', label: 'Panel de Control', verPermiso: 'dashboard:ver', render: renderDashboard },
+  { key: 'calendario', label: 'Calendario', verPermiso: 'calendario:ver', render: renderCalendario },
+  { key: 'clientes', label: 'Clientes', verPermiso: 'clientes:ver', render: renderClientes },
+  { key: 'catalogo', label: 'Servicios & Equipo', verPermiso: 'catalogo:ver', render: renderCatalogo },
+  { key: 'stock', label: 'Stock', verPermiso: 'stock:ver', render: renderStock },
+  { key: 'comandas', label: 'Comandas', verPermiso: 'comandas:crear', render: renderComandas },
+  { key: 'facturacion', label: 'Facturación', verPermiso: 'facturacion:ver', render: renderFacturacion },
+  { key: 'egresos', label: 'Egresos', verPermiso: 'egresos:ver', render: renderEgresos },
+  { key: 'reportes', label: 'Reportes', verPermiso: 'reportes:ver', render: renderReportes },
+  { key: 'marketing', label: 'Marketing', verPermiso: 'marketing:ver', render: renderMarketing }
 ];
 
 let currentUser = null;
 let currentView = null;
 
 function visibleModulesFor(user) {
-  const mods = user.rol === 'admin' ? MODULES.slice() : MODULES.filter((m) => (user.permisos || []).includes(m.key));
-  if (user.rol === 'admin') mods.push({ key: 'usuarios', label: 'Usuarios', render: renderUsuarios });
+  const mods = user.rol === 'admin' ? MODULES.slice() : MODULES.filter((m) => (user.permisos || []).includes(m.verPermiso));
+  if (user.rol === 'admin') {
+    mods.push({ key: 'usuarios', label: 'Usuarios', render: renderUsuarios });
+    mods.push({ key: 'permisos-roles', label: 'Permisos por Rol', render: renderPermisosRoles });
+  }
   return mods;
 }
 
