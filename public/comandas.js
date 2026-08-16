@@ -9,6 +9,8 @@ async function renderComandas(container) {
   ]);
   comandasState = {
     cliente: null,
+    atendidoPorId: '',
+    ajustePct: 0,
     items: [],
     servicios: servicios.filter((s) => s.activo !== false),
     productos: productos.filter((p) => p.activo !== false),
@@ -35,6 +37,13 @@ function renderComandasView(container) {
       <h2 style="margin-top:0; font-size:1rem;">Clienta</h2>
       <input type="text" id="cm-cliente-buscar" placeholder="Buscar clienta o dejar vacío para consumidor final..." autocomplete="off" value="${st.cliente?.nombre || ''}" />
       <div id="cm-cliente-resultados" style="position:relative;"></div>
+      <div class="field" style="margin-top:10px;">
+        <label>Atendido por</label>
+        <select id="cm-atendido-por">
+          <option value="">—</option>
+          ${st.profesionales.map((p) => `<option value="${p.id}" ${st.atendidoPorId === p.id ? 'selected' : ''}>${p.nombre}</option>`).join('')}
+        </select>
+      </div>
     </div>
 
     <div class="row" style="gap:14px; align-items:flex-start; flex-wrap:wrap;">
@@ -72,7 +81,16 @@ function renderComandasView(container) {
         <div class="card">
           <h2 style="margin-top:0; font-size:1rem;">Ítems de la comanda</h2>
           <div id="cm-items"></div>
-          <div style="text-align:right; font-weight:600; margin-top:10px;">Total: $<span id="cm-total">0.00</span></div>
+
+          <div class="field" style="max-width:220px; margin-left:auto; margin-top:10px;">
+            <label>Descuento / recargo (%)</label>
+            <input type="number" id="cm-ajuste-pct" value="${st.ajustePct}" placeholder="Ej: -10 ó 5" />
+          </div>
+
+          <div style="text-align:right; margin-top:6px;">
+            <div style="color:var(--muted); font-size:0.85rem;">Subtotal: $<span id="cm-subtotal">0.00</span></div>
+            <div style="font-weight:600; font-size:1.05rem;">Total: $<span id="cm-total">0.00</span></div>
+          </div>
           <button class="primary" id="cm-enviar" type="button" style="margin-top:12px; width:100%;">Enviar a recepción</button>
         </div>
       </div>
@@ -107,6 +125,12 @@ function renderComandasView(container) {
         toast(`Código no encontrado: ${code}`, 'err');
       }
     });
+  };
+
+  container.querySelector('#cm-atendido-por').onchange = (e) => { comandasState.atendidoPorId = e.target.value; };
+  container.querySelector('#cm-ajuste-pct').oninput = (e) => {
+    comandasState.ajustePct = Number(e.target.value) || 0;
+    updateTotal(container);
   };
 
   container.querySelector('#cm-enviar').onclick = () => enviarComanda(container);
@@ -212,7 +236,9 @@ function renderItems(container) {
 }
 
 function updateTotal(container) {
-  const total = comandasState.items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
+  const subtotal = comandasState.items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
+  const total = subtotal * (1 + (comandasState.ajustePct || 0) / 100);
+  container.querySelector('#cm-subtotal').textContent = subtotal.toFixed(2);
   container.querySelector('#cm-total').textContent = total.toFixed(2);
 }
 
@@ -222,6 +248,8 @@ async function enviarComanda(container) {
   try {
     await api.ventas.create({
       cliente_id: st.cliente?.id || null,
+      atendido_por_id: st.atendidoPorId || null,
+      ajuste_pct: st.ajustePct || 0,
       fecha: new Date().toISOString().slice(0, 10),
       estado: 'pendiente',
       items: st.items.map((it) => ({

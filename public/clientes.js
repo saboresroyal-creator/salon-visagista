@@ -291,23 +291,31 @@ async function openAjusteCtaCteModal(cliente, parentBackdrop, container) {
       <h2>Cuenta corriente de ${cliente.nombre}</h2>
       <p style="margin-top:-8px;">Saldo actual: <b>$${Number(cliente.saldo_cta_cte || 0).toFixed(2)}</b></p>
 
-      <div class="row">
-        <div class="field"><label>Registrar pago</label><input type="number" min="0" step="0.01" id="ac-monto" placeholder="Monto que abonó" /></div>
-        <div class="field"><label>Motivo</label><input id="ac-motivo" placeholder="Opcional" /></div>
+      <div class="field">
+        <label>Registrar pago (puede dividirse entre varios métodos)</label>
+        <div id="ac-pagos"></div>
       </div>
+      <div class="field"><label>Motivo</label><input id="ac-motivo" placeholder="Opcional" /></div>
       <button class="primary" id="ac-pago" type="button">Registrar pago</button>
-      <button class="secondary" id="ac-ajuste" type="button">Aplicar como ajuste manual</button>
+
+      <hr style="border-color:var(--border); margin:16px 0;" />
+      <div class="row">
+        <div class="field"><label>Ajuste manual</label><input type="number" step="0.01" id="ac-ajuste-monto" placeholder="Positivo suma deuda, negativo la resta" /></div>
+      </div>
+      <button class="secondary" id="ac-ajuste" type="button">Aplicar ajuste</button>
 
       <hr style="border-color:var(--border); margin:16px 0;" />
       <h3 style="font-size:0.95rem;">Historial</h3>
       <div id="ac-historial"><p style="color:var(--muted); font-size:0.85rem;">Cargando...</p></div>
 
       <div class="modal-actions">
+        <button class="secondary" id="ac-pdf" type="button">Descargar estado de cuenta (PDF)</button>
         <button class="secondary" id="ac-cerrar">Cerrar</button>
       </div>
     </div>
   `;
   document.body.appendChild(backdrop);
+  backdrop.querySelector('#ac-pdf').onclick = () => window.open(`/api/clientes/${cliente.id}/estado-cuenta.pdf`, '_blank');
   backdrop.querySelector('#ac-cerrar').onclick = () => backdrop.remove();
   backdrop.onclick = (e) => { if (e.target === backdrop) backdrop.remove(); };
 
@@ -321,12 +329,13 @@ async function openAjusteCtaCteModal(cliente, parentBackdrop, container) {
       ? '<p style="color:var(--muted); font-size:0.85rem;">Sin movimientos todavía.</p>'
       : `
         <table class="data-table">
-          <thead><tr><th>Fecha</th><th>Tipo</th><th>Monto</th><th>Motivo</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Tipo</th><th>Método</th><th>Monto</th><th>Motivo</th></tr></thead>
           <tbody>
             ${movimientos.map((m) => `
               <tr>
                 <td>${new Date(m.created_at).toLocaleDateString('es-AR')}</td>
                 <td>${CTA_CTE_TIPO_LABEL[m.tipo] || m.tipo}</td>
+                <td>${m.metodo || '—'}</td>
                 <td>${Number(m.monto) > 0 ? '+' : ''}$${Number(m.monto).toFixed(2)}</td>
                 <td>${m.motivo || ''}</td>
               </tr>
@@ -337,11 +346,42 @@ async function openAjusteCtaCteModal(cliente, parentBackdrop, container) {
   }
   loadHistorial();
 
+  // Métodos de pago para saldar cuenta corriente (no incluye "Cta Cte":
+  // no tiene sentido pagar la cuenta corriente con cuenta corriente).
+  const METODOS_PAGO_CTA_CTE = ['Efectivo', 'Débito', 'Crédito', 'Cheque', 'Transferencia'];
+  let filasPago = [{ metodo: 'Efectivo', monto: '' }];
+  function renderFilasPago() {
+    const box = backdrop.querySelector('#ac-pagos');
+    box.innerHTML = filasPago.map((f, i) => `
+      <div class="row" style="align-items:center; margin-bottom:6px;">
+        <select data-i="${i}" data-field="metodo" style="flex:1;">
+          ${METODOS_PAGO_CTA_CTE.map((m) => `<option value="${m}" ${f.metodo === m ? 'selected' : ''}>${m}</option>`).join('')}
+        </select>
+        <input type="number" min="0" step="0.01" data-i="${i}" data-field="monto" value="${f.monto}" placeholder="Monto" style="width:110px;" />
+        ${filasPago.length > 1 ? `<button type="button" data-remove="${i}" style="border:none;background:none;color:var(--danger);cursor:pointer;">×</button>` : ''}
+      </div>
+    `).join('') + '<button type="button" class="secondary" id="ac-agregar-metodo">+ Otro método</button>';
+
+    box.querySelectorAll('select').forEach((el) => {
+      el.onchange = () => { filasPago[Number(el.dataset.i)].metodo = el.value; };
+    });
+    box.querySelectorAll('input').forEach((el) => {
+      el.oninput = () => { filasPago[Number(el.dataset.i)].monto = el.value; };
+    });
+    box.querySelectorAll('[data-remove]').forEach((btn) => {
+      btn.onclick = () => { filasPago.splice(Number(btn.dataset.remove), 1); renderFilasPago(); };
+    });
+    box.querySelector('#ac-agregar-metodo').onclick = () => { filasPago.push({ metodo: 'Efectivo', monto: '' }); renderFilasPago(); };
+  }
+  renderFilasPago();
+
   function actualizarBalance(nuevoSaldo) {
     cliente.saldo_cta_cte = nuevoSaldo;
     backdrop.querySelector('p').innerHTML = `Saldo actual: <b>$${Number(nuevoSaldo).toFixed(2)}</b>`;
-    backdrop.querySelector('#ac-monto').value = '';
+    filasPago = [{ metodo: 'Efectivo', monto: '' }];
+    renderFilasPago();
     backdrop.querySelector('#ac-motivo').value = '';
+    backdrop.querySelector('#ac-ajuste-monto').value = '';
     loadHistorial();
     const badge = parentBackdrop.querySelector('#cm-ajustar-cta-cte')?.previousElementSibling;
     if (badge) badge.innerHTML = `<b style="font-size:1.3rem; ${nuevoSaldo > 0 ? 'color:var(--danger);' : ''}">$${Number(nuevoSaldo).toFixed(2)}</b> cuenta corriente`;
@@ -349,17 +389,19 @@ async function openAjusteCtaCteModal(cliente, parentBackdrop, container) {
   }
 
   backdrop.querySelector('#ac-pago').onclick = async () => {
-    const monto = Number(backdrop.querySelector('#ac-monto').value);
-    if (!(monto > 0)) { toast('Ingresá un monto mayor a cero', 'err'); return; }
+    const pagos = filasPago
+      .map((f) => ({ metodo: f.metodo, monto: Number(f.monto) || 0 }))
+      .filter((p) => p.monto > 0);
+    if (pagos.length === 0) { toast('Ingresá al menos un monto mayor a cero', 'err'); return; }
     try {
-      const res = await api.clientes.ajustarCuentaCorriente(cliente.id, { monto, tipo: 'pago', motivo: backdrop.querySelector('#ac-motivo').value.trim() });
+      const res = await api.clientes.ajustarCuentaCorriente(cliente.id, { pagos, tipo: 'pago', motivo: backdrop.querySelector('#ac-motivo').value.trim() });
       actualizarBalance(res.saldo_cta_cte);
       toast('Pago registrado');
     } catch (e) { toast(e.message, 'err'); }
   };
 
   backdrop.querySelector('#ac-ajuste').onclick = async () => {
-    const monto = Number(backdrop.querySelector('#ac-monto').value);
+    const monto = Number(backdrop.querySelector('#ac-ajuste-monto').value);
     if (!Number.isFinite(monto) || monto === 0) { toast('Ingresá un monto distinto de cero (negativo para restar)', 'err'); return; }
     try {
       const res = await api.clientes.ajustarCuentaCorriente(cliente.id, { monto, tipo: 'ajuste', motivo: backdrop.querySelector('#ac-motivo').value.trim() });

@@ -84,12 +84,21 @@ async function loadVentasDelDia(container) {
             <td>${(v.venta_items || []).map((i) => `${i.descripcion} x${i.cantidad}`).join(', ')}</td>
             <td>${v.metodo_pago || '—'}</td>
             <td>$${Number(v.total).toFixed(2)}</td>
-            <td><button class="danger" data-del="${v.id}">Eliminar</button></td>
+            <td style="white-space:nowrap;">
+              <button class="secondary" data-comprobante="${v.id}" type="button">Comprobante</button>
+              <button class="danger" data-del="${v.id}">Eliminar</button>
+            </td>
           </tr>
         `).join('')}
       </tbody>
     </table>
   `;
+  box.querySelectorAll('[data-comprobante]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      window.open(`/api/ventas/${btn.dataset.comprobante}/comprobante.pdf`, '_blank');
+    };
+  });
   box.querySelectorAll('[data-del]').forEach((btn) => {
     btn.onclick = async (e) => {
       e.stopPropagation();
@@ -103,8 +112,10 @@ async function loadVentasDelDia(container) {
 
 // Editor de pago dividido: uno o más renglones de método + monto que tienen
 // que sumar el total. Se usa tanto para cobrar una comanda pendiente como
-// para el flujo directo de "+ Nueva venta".
-function crearEditorPagos(mountEl, totalInicial, onCtaCteToggle) {
+// para el flujo directo de "+ Nueva venta". getClienteId (opcional) permite
+// el botón "Dejar diferencia a cuenta corriente", que carga como deuda lo
+// que no se llegó a cobrar en el momento.
+function crearEditorPagos(mountEl, totalInicial, onCtaCteToggle, getClienteId) {
   let total = totalInicial;
   let pagos = [{ metodo: 'Efectivo', monto: total }];
 
@@ -146,12 +157,27 @@ function crearEditorPagos(mountEl, totalInicial, onCtaCteToggle) {
 
   mountEl.innerHTML = `
     <div id="pg-filas"></div>
-    <button type="button" class="secondary" id="pg-agregar" style="margin-bottom:6px;">+ Otro método</button>
+    <div class="row" style="gap:8px; flex-wrap:wrap; margin-bottom:6px;">
+      <button type="button" class="secondary" id="pg-agregar">+ Otro método</button>
+      <button type="button" class="secondary" id="pg-resto-ctacte">Dejar diferencia a cuenta corriente</button>
+    </div>
     <p id="pg-resumen" style="text-align:right; font-size:0.85rem; margin:4px 0 0;"></p>
   `;
   mountEl.querySelector('#pg-agregar').onclick = () => {
     const sumaActual = pagos.reduce((s, p) => s + (Number(p.monto) || 0), 0);
     pagos.push({ metodo: 'Efectivo', monto: Math.max(0, Math.round((total - sumaActual) * 100) / 100) });
+    renderFilas();
+    renderResumen();
+  };
+  mountEl.querySelector('#pg-resto-ctacte').onclick = () => {
+    const clienteId = getClienteId ? getClienteId() : null;
+    if (!clienteId) { toast('Elegí una clienta primero para poder dejar la diferencia a cuenta corriente', 'err'); return; }
+    const sumaActual = pagos.reduce((s, p) => s + (Number(p.monto) || 0), 0);
+    const falta = Math.round((total - sumaActual) * 100) / 100;
+    if (falta <= 0) { toast('No hay diferencia pendiente por cobrar', 'err'); return; }
+    const existente = pagos.find((p) => p.metodo === 'Cta Cte');
+    if (existente) existente.monto = Math.round(((Number(existente.monto) || 0) + falta) * 100) / 100;
+    else pagos.push({ metodo: 'Cta Cte', monto: falta });
     renderFilas();
     renderResumen();
   };
@@ -185,13 +211,16 @@ async function openCobrarModal(venta, container) {
   backdrop.innerHTML = `
     <div class="modal" style="width:520px;">
       <h2 style="margin-top:0;">Cobrar comanda</h2>
-      <p style="margin-top:-8px; color:var(--muted);">${venta.clientes?.nombre || 'Consumidor final'}</p>
+      <p style="margin-top:-8px; color:var(--muted);">
+        ${venta.clientes?.nombre || 'Consumidor final'}${venta.profesionales?.nombre ? ` · Atendido por ${venta.profesionales.nombre}` : ''}
+      </p>
       <table class="data-table" style="margin-bottom:10px;">
         <thead><tr><th>Ítem</th><th>Cant.</th><th>Precio</th></tr></thead>
         <tbody>
           ${(venta.venta_items || []).map((it) => `<tr><td>${it.descripcion}</td><td>${it.cantidad}</td><td>$${Number(it.precio_unitario).toFixed(2)}</td></tr>`).join('')}
         </tbody>
       </table>
+      ${Number(venta.ajuste_pct) ? `<div style="text-align:right; color:var(--muted); font-size:0.85rem;">Subtotal: $${Number(venta.subtotal ?? venta.total).toFixed(2)} · ${Number(venta.ajuste_pct) > 0 ? 'Recargo' : 'Descuento'}: ${Number(venta.ajuste_pct)}%</div>` : ''}
       <div style="text-align:right; font-weight:600; margin-bottom:10px;">Total: $${Number(venta.total).toFixed(2)}</div>
       <div id="cb-cta-cte-info" style="display:none; font-size:0.82rem; margin-bottom:8px;"></div>
       <div id="cb-pagos"></div>
@@ -210,7 +239,7 @@ async function openCobrarModal(venta, container) {
   const editor = crearEditorPagos(backdrop.querySelector('#cb-pagos'), Number(venta.total), (usaCtaCte) => {
     if (!usaCtaCte) { infoBox.style.display = 'none'; return; }
     mostrarInfoCtaCte(infoBox, venta.cliente_id);
-  });
+  }, () => venta.cliente_id);
 
   backdrop.querySelector('#cb-confirmar').onclick = async () => {
     try {
@@ -224,7 +253,7 @@ async function openCobrarModal(venta, container) {
 }
 
 async function openVentaModal(container) {
-  const [servicios, productos] = await Promise.all([api.servicios.list(), api.productos.list()]);
+  const [servicios, productos, profesionales] = await Promise.all([api.servicios.list(), api.productos.list(), api.profesionales.list()]);
   let clienteSeleccionado = null;
   let items = [];
 
@@ -238,6 +267,14 @@ async function openVentaModal(container) {
         <label>Clienta (opcional)</label>
         <input type="text" id="vm-cliente-buscar" placeholder="Buscar o dejar vacío para consumidor final..." autocomplete="off" />
         <div id="vm-cliente-resultados" style="position:relative;"></div>
+      </div>
+
+      <div class="field">
+        <label>Atendido por</label>
+        <select id="vm-atendido-por">
+          <option value="">—</option>
+          ${profesionales.filter((p) => p.activo !== false).map((p) => `<option value="${p.id}">${p.nombre}</option>`).join('')}
+        </select>
       </div>
 
       <div class="field">
@@ -259,7 +296,15 @@ async function openVentaModal(container) {
         <input type="date" id="vm-fecha" value="${facturacionState.fecha}" />
       </div>
 
-      <div style="text-align:right; font-weight:600; margin-top:8px;">Total: $<span id="vm-total">0.00</span></div>
+      <div class="field" style="max-width:220px; margin-left:auto;">
+        <label>Descuento / recargo (%)</label>
+        <input type="number" id="vm-ajuste-pct" value="0" placeholder="Ej: -10 ó 5" />
+      </div>
+
+      <div style="text-align:right; margin-top:4px;">
+        <div style="color:var(--muted); font-size:0.85rem;">Subtotal: $<span id="vm-subtotal">0.00</span></div>
+        <div style="font-weight:600; font-size:1.05rem;">Total: $<span id="vm-total">0.00</span></div>
+      </div>
 
       <div class="field" style="margin-top:10px;">
         <label>Pago</label>
@@ -278,14 +323,20 @@ async function openVentaModal(container) {
   backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
   backdrop.querySelector('#vm-cancelar').onclick = close;
 
+  function calcularTotal() {
+    const subtotal = items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
+    const ajustePct = Number(backdrop.querySelector('#vm-ajuste-pct')?.value) || 0;
+    return { subtotal, total: subtotal * (1 + ajustePct / 100) };
+  }
+
   let editorPagos = null;
   function renderEditorPagos() {
-    const total = items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
+    const { total } = calcularTotal();
     const infoBox = backdrop.querySelector('#vm-cta-cte-info');
     editorPagos = crearEditorPagos(backdrop.querySelector('#vm-pagos'), total, (usaCtaCte) => {
       if (!usaCtaCte) { infoBox.style.display = 'none'; return; }
       mostrarInfoCtaCte(infoBox, clienteSeleccionado?.id);
-    });
+    }, () => clienteSeleccionado?.id);
   }
 
   function renderItems() {
@@ -310,7 +361,8 @@ async function openVentaModal(container) {
   }
 
   function updateTotal() {
-    const total = items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
+    const { subtotal, total } = calcularTotal();
+    backdrop.querySelector('#vm-subtotal').textContent = subtotal.toFixed(2);
     backdrop.querySelector('#vm-total').textContent = total.toFixed(2);
     if (editorPagos) editorPagos.setTotal(total);
   }
@@ -324,6 +376,8 @@ async function openVentaModal(container) {
     updateTotal();
     e.target.value = '';
   };
+
+  backdrop.querySelector('#vm-ajuste-pct').oninput = () => updateTotal();
 
   const buscarInput = backdrop.querySelector('#vm-cliente-buscar');
   const resultadosBox = backdrop.querySelector('#vm-cliente-resultados');
@@ -355,6 +409,8 @@ async function openVentaModal(container) {
     try {
       await api.ventas.create({
         cliente_id: clienteSeleccionado?.id || null,
+        atendido_por_id: backdrop.querySelector('#vm-atendido-por').value || null,
+        ajuste_pct: Number(backdrop.querySelector('#vm-ajuste-pct').value) || 0,
         fecha: backdrop.querySelector('#vm-fecha').value,
         estado: 'cobrada',
         pagos: editorPagos.getPagos(),

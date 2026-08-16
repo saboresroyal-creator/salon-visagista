@@ -3,6 +3,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
+import { generarComprobantePDF, generarEstadoCuentaPDF } from './pdf.js';
 
 dotenv.config();
 
@@ -307,19 +308,56 @@ app.get('/api/clientes/:id/cuenta-corriente', async (req, res) => {
   res.json(data);
 });
 
+app.get('/api/clientes/:id/estado-cuenta.pdf', requirePermiso('clientes:cuenta_corriente'), async (req, res) => {
+  const { id } = req.params;
+  const { data: cliente, error: clienteError } = await supabase.from('clientes').select('*').eq('id', id).single();
+  if (clienteError || !cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+  const { data: movimientos, error: movError } = await supabase
+    .from('cuenta_corriente_movimientos').select('*').eq('cliente_id', id).order('created_at', { ascending: true });
+  if (movError) return res.status(500).json({ error: movError.message });
+
+  generarEstadoCuentaPDF(res, cliente, movimientos || []);
+});
+
 app.post('/api/clientes/:id/cuenta-corriente', requirePermiso('clientes:cuenta_corriente'), async (req, res) => {
   const { id } = req.params;
-  const monto = Number(req.body.monto);
-  if (!Number.isFinite(monto) || monto === 0) {
-    return res.status(400).json({ error: 'El monto debe ser un número distinto de cero' });
-  }
   const tipo = ['cargo', 'pago', 'ajuste'].includes(req.body.tipo) ? req.body.tipo : 'ajuste';
-  // Un pago reduce lo que debe la clienta; un cargo/ajuste positivo lo aumenta.
-  const delta = tipo === 'pago' ? -Math.abs(monto) : monto;
 
   const { data: cliente, error: clienteError } = await supabase.from('clientes').select('saldo_cta_cte').eq('id', id).single();
   if (clienteError) return res.status(404).json({ error: 'Cliente no encontrado' });
 
+  // Un pago puede venir dividido entre varios métodos a la vez (ej. parte
+  // efectivo, parte transferencia): un movimiento por método, todos
+  // restando del saldo. Puede ser un pago parcial — no hace falta que
+  // cubra toda la deuda, lo que sobra queda pendiente en el saldo.
+  if (tipo === 'pago' && Array.isArray(req.body.pagos)) {
+    const pagos = req.body.pagos.filter((p) => Number(p.monto) > 0);
+    if (pagos.length === 0) return res.status(400).json({ error: 'Ingresá al menos un monto mayor a cero' });
+
+    const totalPagado = pagos.reduce((s, p) => s + Number(p.monto), 0);
+    const nuevoBalance = (cliente.saldo_cta_cte || 0) - totalPagado;
+    const { error: updateError } = await supabase.from('clientes').update({ saldo_cta_cte: nuevoBalance }).eq('id', id);
+    if (updateError) return res.status(500).json({ error: updateError.message });
+
+    const { data: movimientos, error: movError } = await supabase
+      .from('cuenta_corriente_movimientos')
+      .insert(pagos.map((p) => ({
+        cliente_id: id, tipo: 'pago', monto: -Math.abs(Number(p.monto)),
+        metodo: p.metodo, motivo: req.body.motivo || null
+      })))
+      .select();
+    if (movError) return res.status(500).json({ error: movError.message });
+
+    return res.json({ saldo_cta_cte: nuevoBalance, movimientos });
+  }
+
+  // Ajuste manual: un solo monto con signo (positivo suma deuda, negativo la resta).
+  const monto = Number(req.body.monto);
+  if (!Number.isFinite(monto) || monto === 0) {
+    return res.status(400).json({ error: 'El monto debe ser un número distinto de cero' });
+  }
+  const delta = tipo === 'pago' ? -Math.abs(monto) : monto;
   const nuevoBalance = (cliente.saldo_cta_cte || 0) + delta;
   const { error: updateError } = await supabase.from('clientes').update({ saldo_cta_cte: nuevoBalance }).eq('id', id);
   if (updateError) return res.status(500).json({ error: updateError.message });
@@ -603,7 +641,7 @@ app.delete('/api/turnos/:id', requirePermiso('calendario:gestionar'), async (req
 });
 
 // ── Ventas (facturación) ──
-const VENTA_SELECT = '*, clientes(id,nombre,telefono), venta_items(*), venta_pagos(*)';
+const VENTA_SELECT = '*, clientes(id,nombre,telefono), profesionales(id,nombre), venta_items(*), venta_pagos(*)';
 
 async function descontarStockItems(itemRows) {
   for (const it of itemRows) {
@@ -702,6 +740,13 @@ app.get('/api/ventas/:id', requirePermiso('facturacion:ver'), async (req, res) =
   res.json(data);
 });
 
+app.get('/api/ventas/:id/comprobante.pdf', requirePermiso('facturacion:ver'), async (req, res) => {
+  const { data: venta, error } = await supabase.from('ventas').select(VENTA_SELECT).eq('id', req.params.id).single();
+  if (error || !venta) return res.status(404).json({ error: 'Venta no encontrada' });
+  if (venta.estado !== 'cobrada') return res.status(400).json({ error: 'Esta venta todavía no fue cobrada' });
+  generarComprobantePDF(res, venta);
+});
+
 app.post('/api/ventas', async (req, res) => {
   const { items } = req.body;
   if (!Array.isArray(items) || items.length === 0) {
@@ -726,13 +771,18 @@ app.post('/api/ventas', async (req, res) => {
     profesional_diag_id: it.profesional_diag_id || null,
     profesional_asist_id: it.profesional_asist_id || null
   }));
-  const total = itemRows.reduce((sum, it) => sum + it.subtotal, 0);
+  const subtotalVenta = itemRows.reduce((sum, it) => sum + it.subtotal, 0);
+  const ajustePct = Number(req.body.ajuste_pct) || 0;
+  const total = Math.round(subtotalVenta * (1 + ajustePct / 100) * 100) / 100;
   const ventaPayload = {
     turno_id: req.body.turno_id || null,
     cliente_id: req.body.cliente_id || null,
+    atendido_por_id: req.body.atendido_por_id || null,
     fecha: req.body.fecha || new Date().toISOString().slice(0, 10),
     estado,
     metodo_pago: null,
+    subtotal: subtotalVenta,
+    ajuste_pct: ajustePct,
     total
   };
 
@@ -970,23 +1020,52 @@ app.get('/api/reportes', async (req, res) => {
 });
 
 // ── Marketing ──
+// Recordatorios de turno: se calculan sobre los turnos reales del
+// calendario (no sobre el campo manual "próxima cita" del cliente, que
+// nadie actualiza al agendar) — así siempre reflejan lo que realmente está
+// agendado, y una cancelación o reprogramación los ajusta solos.
 app.get('/api/marketing/recordatorios', requirePermiso('marketing:ver'), async (req, res) => {
-  const { data, error } = await supabase
-    .from('clientes')
-    .select('id,nombre,telefono,proxima_cita_fecha,proxima_cita_hora,dias_aviso,msg_recordatorio')
-    .not('proxima_cita_fecha', 'is', null);
-  if (error) return res.status(500).json({ error: error.message });
-
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
+  const hasta = new Date(hoy);
+  hasta.setDate(hasta.getDate() + 8);
+  const desde = hoy.toISOString().slice(0, 10);
+  const hastaStr = hasta.toISOString().slice(0, 10);
 
-  const pendientes = data.filter((c) => {
-    const cita = new Date(c.proxima_cita_fecha + 'T00:00:00');
-    const diffDias = Math.round((cita - hoy) / 86400000);
-    return diffDias >= 0 && diffDias <= (c.dias_aviso ?? 2);
-  });
+  const { data: turnos, error } = await supabase
+    .from('turnos')
+    .select('id, fecha, hora_inicio, cliente_id, clientes(id,nombre,telefono,msg_recordatorio)')
+    .eq('estado', 'confirmado')
+    .gte('fecha', desde)
+    .lte('fecha', hastaStr)
+    .order('fecha', { ascending: true })
+    .order('hora_inicio', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
 
-  res.json(pendientes);
+  const { data: enviados, error: envError } = await supabase
+    .from('mensajes_enviados')
+    .select('turno_id, tipo')
+    .in('tipo', ['recordatorio_semana', 'recordatorio_24h'])
+    .not('turno_id', 'is', null);
+  if (envError) return res.status(500).json({ error: envError.message });
+  const yaEnviado = new Set((enviados || []).map((e) => `${e.turno_id}:${e.tipo}`));
+
+  const semana = [];
+  const veinticuatro = [];
+  for (const t of turnos || []) {
+    if (!t.clientes) continue;
+    const diffDias = Math.round((new Date(t.fecha + 'T00:00:00') - hoy) / 86400000);
+    const base = {
+      turno_id: t.id, cliente_id: t.cliente_id,
+      nombre: t.clientes.nombre, telefono: t.clientes.telefono,
+      fecha: t.fecha, hora: t.hora_inicio, msg_recordatorio: t.clientes.msg_recordatorio,
+      diasFaltantes: diffDias
+    };
+    if (diffDias >= 1 && diffDias <= 7 && !yaEnviado.has(`${t.id}:recordatorio_semana`)) semana.push(base);
+    if (diffDias >= 0 && diffDias <= 1 && !yaEnviado.has(`${t.id}:recordatorio_24h`)) veinticuatro.push(base);
+  }
+
+  res.json({ semana, veinticuatro });
 });
 
 // Sin gate: el Dashboard también usa este endpoint para la card de
@@ -1018,12 +1097,12 @@ app.get('/api/marketing/cumpleanos', async (req, res) => {
 });
 
 app.post('/api/mensajes-enviados', requirePermiso('marketing:enviar'), async (req, res) => {
-  const { cliente_id, tipo, mensaje } = req.body;
+  const { cliente_id, tipo, mensaje, turno_id } = req.body;
   if (!cliente_id || !tipo) return res.status(400).json({ error: 'cliente_id y tipo son obligatorios' });
 
   const { data, error } = await supabase
     .from('mensajes_enviados')
-    .insert([{ cliente_id, tipo, mensaje: mensaje || null }])
+    .insert([{ cliente_id, tipo, mensaje: mensaje || null, turno_id: turno_id || null }])
     .select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
