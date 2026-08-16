@@ -2,19 +2,23 @@ let comandasState = null;
 
 async function renderComandas(container) {
   container.innerHTML = '<p>Cargando...</p>';
-  const [servicios, productos, profesionales] = await Promise.all([
+  const [servicios, productos, profesionales, listasPrecio] = await Promise.all([
     api.servicios.list(),
     api.productos.list(),
-    api.profesionales.list()
+    api.profesionales.list(),
+    api.listasPrecio.list()
   ]);
   comandasState = {
     cliente: null,
+    fecha: new Date().toISOString().slice(0, 10),
     atendidoPorId: '',
+    listaPrecioId: '',
     ajustePct: 0,
     items: [],
     servicios: servicios.filter((s) => s.activo !== false),
     productos: productos.filter((p) => p.activo !== false),
-    profesionales: profesionales.filter((p) => p.activo !== false)
+    profesionales: profesionales.filter((p) => p.activo !== false),
+    listasPrecio: listasPrecio.filter((l) => l.activo !== false)
   };
   renderComandasView(container);
 }
@@ -28,72 +32,89 @@ function gruposPorCategoria(servicios) {
   return grupos;
 }
 
+function resolverPrecioServicio(servicio, listaId) {
+  if (listaId && servicio.precios_por_lista && servicio.precios_por_lista[listaId] != null) {
+    return Number(servicio.precios_por_lista[listaId]);
+  }
+  return Number(servicio.precio);
+}
+
 function renderComandasView(container) {
   const st = comandasState;
   const grupos = gruposPorCategoria(st.servicios);
 
   container.innerHTML = `
-    <div class="card" style="margin-bottom:16px;">
+    <div class="card" style="margin-bottom:14px;">
       <h2 style="margin-top:0; font-size:1rem;">Clienta</h2>
       <input type="text" id="cm-cliente-buscar" placeholder="Buscar clienta o dejar vacío para consumidor final..." autocomplete="off" value="${st.cliente?.nombre || ''}" />
       <div id="cm-cliente-resultados" style="position:relative;"></div>
-      <div class="field" style="margin-top:10px;">
-        <label>Atendido por</label>
-        <select id="cm-atendido-por">
-          <option value="">—</option>
-          ${st.profesionales.map((p) => `<option value="${p.id}" ${st.atendidoPorId === p.id ? 'selected' : ''}>${p.nombre}</option>`).join('')}
-        </select>
+
+      <div class="row" style="margin-top:10px;">
+        <div class="field"><label>Fecha</label><input type="date" id="cm-fecha" value="${st.fecha}" /></div>
+        <div class="field"><label>Atendido por</label>
+          <select id="cm-atendido-por">
+            <option value="">—</option>
+            ${st.profesionales.map((p) => `<option value="${p.id}" ${st.atendidoPorId === p.id ? 'selected' : ''}>${p.nombre}</option>`).join('')}
+          </select>
+        </div>
       </div>
+
+      ${st.listasPrecio.length > 0 ? `
+        <div class="field" style="margin-top:10px;">
+          <label>Lista de precio</label>
+          <select id="cm-lista-precio">
+            <option value="">Precio de lista (base)</option>
+            ${st.listasPrecio.map((l) => `<option value="${l.id}" ${st.listaPrecioId === l.id ? 'selected' : ''}>${l.nombre}</option>`).join('')}
+          </select>
+        </div>
+      ` : ''}
     </div>
 
-    <div class="row" style="gap:14px; align-items:flex-start; flex-wrap:wrap;">
-      <div style="flex:2; min-width:320px;">
-        ${Object.entries(grupos).map(([cat, items], gi) => `
-          <div class="card" style="margin-bottom:14px;">
-            <h2 style="margin-top:0; font-size:1rem;">${cat}</h2>
-            <div class="row" style="flex-wrap:wrap; gap:6px;">
-              ${items.map((s) => `<button type="button" class="secondary cm-add-servicio" data-id="${s.id}" data-grupo="${gi}">${s.nombre} · $${Number(s.precio).toFixed(2)}</button>`).join('')}
-            </div>
+    <div class="card" style="margin-bottom:14px;">
+      <h2 style="margin-top:0; font-size:1rem;">Servicios</h2>
+      ${Object.entries(grupos).map(([cat, items]) => `
+        <div style="margin-bottom:10px;">
+          <div style="font-size:0.82rem; color:var(--muted); font-weight:600; margin-bottom:4px;">${cat}</div>
+          <div class="row" style="flex-wrap:wrap; gap:6px;">
+            ${items.map((s) => `<button type="button" class="secondary cm-add-servicio" data-id="${s.id}">${s.nombre} · $${resolverPrecioServicio(s, st.listaPrecioId).toFixed(2)}</button>`).join('')}
           </div>
-        `).join('')}
-
-        <div class="card" style="margin-bottom:14px;">
-          <h2 style="margin-top:0; font-size:1rem;">Ítem personalizado</h2>
-          <p style="color:var(--muted); font-size:0.8rem; margin-top:-6px;">Para fórmulas de color u otro ítem que no está en el catálogo.</p>
-          <div class="row">
-            <div class="field"><label>Descripción</label><input id="cm-custom-desc" placeholder="Ej: Sistema color *" /></div>
-            <div class="field" style="max-width:140px;"><label>Precio</label><input type="number" id="cm-custom-precio" value="0" /></div>
-          </div>
-          <button type="button" class="secondary" id="cm-add-custom">+ Agregar</button>
         </div>
+      `).join('')}
+    </div>
 
-        <div class="card">
-          <h2 style="margin-top:0; font-size:1rem;">Productos</h2>
-          <div class="row">
-            <input type="text" id="cm-producto-buscar" placeholder="Buscar producto..." autocomplete="off" style="flex:1;" />
-            <button type="button" class="secondary" id="cm-escanear">📷 Escanear</button>
-          </div>
-          <div id="cm-producto-resultados"></div>
-        </div>
+    <div class="card" style="margin-bottom:14px;">
+      <h2 style="margin-top:0; font-size:1rem;">Ítem personalizado</h2>
+      <p style="color:var(--muted); font-size:0.8rem; margin-top:-6px;">Para fórmulas de color u otro ítem que no está en el catálogo.</p>
+      <div class="row">
+        <div class="field"><label>Descripción</label><input id="cm-custom-desc" placeholder="Ej: Sistema color *" /></div>
+        <div class="field" style="max-width:140px;"><label>Precio</label><input type="number" id="cm-custom-precio" value="0" /></div>
+      </div>
+      <button type="button" class="secondary" id="cm-add-custom">+ Agregar</button>
+    </div>
+
+    <div class="card" style="margin-bottom:14px;">
+      <h2 style="margin-top:0; font-size:1rem;">Productos</h2>
+      <div class="row">
+        <input type="text" id="cm-producto-buscar" placeholder="Buscar producto..." autocomplete="off" style="flex:1;" />
+        <button type="button" class="secondary" id="cm-escanear">📷 Escanear</button>
+      </div>
+      <div id="cm-producto-resultados"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0; font-size:1rem;">Ítems de la comanda</h2>
+      <div id="cm-items"></div>
+
+      <div class="field" style="max-width:220px; margin-left:auto; margin-top:10px;">
+        <label>Descuento / recargo (%)</label>
+        <input type="number" id="cm-ajuste-pct" value="${st.ajustePct}" placeholder="Ej: -10 ó 5" />
       </div>
 
-      <div style="flex:3; min-width:340px;">
-        <div class="card">
-          <h2 style="margin-top:0; font-size:1rem;">Ítems de la comanda</h2>
-          <div id="cm-items"></div>
-
-          <div class="field" style="max-width:220px; margin-left:auto; margin-top:10px;">
-            <label>Descuento / recargo (%)</label>
-            <input type="number" id="cm-ajuste-pct" value="${st.ajustePct}" placeholder="Ej: -10 ó 5" />
-          </div>
-
-          <div style="text-align:right; margin-top:6px;">
-            <div style="color:var(--muted); font-size:0.85rem;">Subtotal: $<span id="cm-subtotal">0.00</span></div>
-            <div style="font-weight:600; font-size:1.05rem;">Total: $<span id="cm-total">0.00</span></div>
-          </div>
-          <button class="primary" id="cm-enviar" type="button" style="margin-top:12px; width:100%;">Enviar a recepción</button>
-        </div>
+      <div style="text-align:right; margin-top:6px;">
+        <div style="color:var(--muted); font-size:0.85rem;">Subtotal: $<span id="cm-subtotal">0.00</span></div>
+        <div style="font-weight:600; font-size:1.05rem;">Total: $<span id="cm-total">0.00</span></div>
       </div>
+      <button class="primary" id="cm-enviar" type="button" style="margin-top:12px; width:100%;">Enviar a recepción</button>
     </div>
   `;
 
@@ -103,7 +124,8 @@ function renderComandasView(container) {
   container.querySelectorAll('.cm-add-servicio').forEach((btn) => {
     btn.onclick = () => {
       const servicio = st.servicios.find((s) => s.id === btn.dataset.id);
-      agregarItem(container, { tipo: 'servicio', referencia_id: servicio.id, descripcion: servicio.nombre, cantidad: 1, precio_unitario: Number(servicio.precio) });
+      const precio = resolverPrecioServicio(servicio, st.listaPrecioId);
+      agregarItem(container, { tipo: 'servicio', referencia_id: servicio.id, descripcion: servicio.nombre, cantidad: 1, precio_unitario: precio });
     };
   });
 
@@ -127,7 +149,15 @@ function renderComandasView(container) {
     });
   };
 
+  container.querySelector('#cm-fecha').onchange = (e) => { comandasState.fecha = e.target.value; };
   container.querySelector('#cm-atendido-por').onchange = (e) => { comandasState.atendidoPorId = e.target.value; };
+  const listaSelect = container.querySelector('#cm-lista-precio');
+  if (listaSelect) {
+    listaSelect.onchange = (e) => {
+      comandasState.listaPrecioId = e.target.value;
+      renderComandasView(container);
+    };
+  }
   container.querySelector('#cm-ajuste-pct').oninput = (e) => {
     comandasState.ajustePct = Number(e.target.value) || 0;
     updateTotal(container);
@@ -196,7 +226,7 @@ function agregarItem(container, item) {
 function renderItems(container) {
   const st = comandasState;
   const box = container.querySelector('#cm-items');
-  box.innerHTML = st.items.length === 0 ? '<p style="color:var(--muted)">Sin ítems todavía. Elegí servicios o productos de la izquierda.</p>' : st.items.map((it, i) => `
+  box.innerHTML = st.items.length === 0 ? '<p style="color:var(--muted)">Sin ítems todavía. Elegí servicios o productos arriba.</p>' : st.items.map((it, i) => `
     <div class="card" style="margin-bottom:8px; padding:10px;">
       <div class="row" style="align-items:center;">
         <span style="flex:2; font-weight:600;">${it.descripcion}</span>
@@ -250,7 +280,7 @@ async function enviarComanda(container) {
       cliente_id: st.cliente?.id || null,
       atendido_por_id: st.atendidoPorId || null,
       ajuste_pct: st.ajustePct || 0,
-      fecha: new Date().toISOString().slice(0, 10),
+      fecha: st.fecha,
       estado: 'pendiente',
       items: st.items.map((it) => ({
         tipo: it.tipo,

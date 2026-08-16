@@ -41,6 +41,12 @@ const api = {
     update: (id, data) => apiRequest('PUT', `/api/servicios/${id}`, data),
     remove: (id) => apiRequest('DELETE', `/api/servicios/${id}`)
   },
+  listasPrecio: {
+    list: () => apiRequest('GET', '/api/listas-precio'),
+    create: (data) => apiRequest('POST', '/api/listas-precio', data),
+    update: (id, data) => apiRequest('PUT', `/api/listas-precio/${id}`, data),
+    remove: (id) => apiRequest('DELETE', `/api/listas-precio/${id}`)
+  },
   productos: {
     list: () => apiRequest('GET', '/api/productos'),
     create: (data) => apiRequest('POST', '/api/productos', data),

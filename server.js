@@ -424,6 +424,7 @@ app.post('/api/servicios', requirePermiso('catalogo:gestionar'), async (req, res
     categoria: req.body.categoria || null,
     duracion_min: req.body.duracion_min || 30,
     precio: req.body.precio || 0,
+    precios_por_lista: req.body.precios_por_lista || {},
     activo: req.body.activo !== false
   };
   const { data, error } = await supabase.from('servicios').insert([payload]).select().single();
@@ -434,7 +435,7 @@ app.post('/api/servicios', requirePermiso('catalogo:gestionar'), async (req, res
 app.put('/api/servicios/:id', requirePermiso('catalogo:gestionar'), async (req, res) => {
   const { id } = req.params;
   const payload = {};
-  for (const key of ['nombre', 'categoria', 'duracion_min', 'precio', 'activo']) {
+  for (const key of ['nombre', 'categoria', 'duracion_min', 'precio', 'precios_por_lista', 'activo']) {
     if (req.body[key] !== undefined) payload[key] = req.body[key];
   }
   const { data, error } = await supabase.from('servicios').update(payload).eq('id', id).select().single();
@@ -445,6 +446,38 @@ app.put('/api/servicios/:id', requirePermiso('catalogo:gestionar'), async (req, 
 app.delete('/api/servicios/:id', requirePermiso('catalogo:eliminar'), async (req, res) => {
   const { id } = req.params;
   const { error } = await supabase.from('servicios').delete().eq('id', id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+// ── Listas de precio ──
+app.get('/api/listas-precio', async (req, res) => {
+  const { data, error } = await supabase.from('listas_precio').select('*').order('nombre', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.post('/api/listas-precio', requirePermiso('catalogo:gestionar'), async (req, res) => {
+  const nombre = (req.body.nombre || '').trim();
+  if (!nombre) return res.status(400).json({ error: 'El nombre es obligatorio' });
+  const { data, error } = await supabase.from('listas_precio').insert([{ nombre, activo: req.body.activo !== false }]).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.put('/api/listas-precio/:id', requirePermiso('catalogo:gestionar'), async (req, res) => {
+  const { id } = req.params;
+  const payload = {};
+  for (const key of ['nombre', 'activo']) {
+    if (req.body[key] !== undefined) payload[key] = req.body[key];
+  }
+  const { data, error } = await supabase.from('listas_precio').update(payload).eq('id', id).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.delete('/api/listas-precio/:id', requirePermiso('catalogo:eliminar'), async (req, res) => {
+  const { error } = await supabase.from('listas_precio').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });

@@ -1,9 +1,18 @@
+let catalogoListasPrecio = [];
+
 async function renderCatalogo(container) {
   container.innerHTML = `
     <div class="card" style="margin-bottom:16px;">
       <h2 style="margin-top:0;">Profesionales</h2>
       <div id="cat-profesionales"><p>Cargando...</p></div>
       <button class="secondary" id="cat-add-prof" type="button" style="margin-top:10px;">+ Agregar profesional</button>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <h2 style="margin-top:0;">Listas de precio</h2>
+      <p style="color:var(--muted); font-size:0.8rem; margin-top:-8px;">Un servicio puede valer distinto según la lista elegida al armar la comanda.</p>
+      <div id="cat-listas-precio"><p>Cargando...</p></div>
+      <button class="secondary" id="cat-add-lista" type="button" style="margin-top:10px;">+ Agregar lista de precio</button>
     </div>
 
     <div class="card" style="margin-bottom:16px;">
@@ -20,10 +29,54 @@ async function renderCatalogo(container) {
   `;
 
   container.querySelector('#cat-add-prof').onclick = () => openProfesionalModal(null, container);
+  container.querySelector('#cat-add-lista').onclick = () => openListaPrecioModal(null, container);
   container.querySelector('#cat-add-serv').onclick = () => openServicioModal(null, container);
   container.querySelector('#cat-add-prod').onclick = () => openProductoModal(null, container);
 
-  await Promise.all([loadProfesionales(container), loadServicios(container), loadProductos(container)]);
+  catalogoListasPrecio = await api.listasPrecio.list();
+  await Promise.all([loadProfesionales(container), loadListasPrecio(container), loadServicios(container), loadProductos(container)]);
+}
+
+async function loadListasPrecio(container) {
+  const box = container.querySelector('#cat-listas-precio');
+  catalogoListasPrecio = await api.listasPrecio.list();
+  const data = catalogoListasPrecio;
+  box.innerHTML = data.length === 0 ? '<p style="color:var(--muted)">Sin listas de precio cargadas.</p>' : `
+    <table class="data-table">
+      <thead><tr><th>Nombre</th><th>Estado</th></tr></thead>
+      <tbody>${data.map((l) => `
+        <tr data-id="${l.id}">
+          <td>${l.nombre}</td><td>${l.activo === false ? 'Inactiva' : 'Activa'}</td>
+        </tr>`).join('')}</tbody>
+    </table>`;
+  box.querySelectorAll('tr[data-id]').forEach((row) => {
+    row.onclick = () => openListaPrecioModal(data.find((l) => l.id === row.dataset.id), container);
+  });
+}
+
+function openListaPrecioModal(lista, container) {
+  const isEdit = !!lista;
+  smallModal(isEdit ? 'Editar lista de precio' : 'Nueva lista de precio', `
+      <div class="field"><label>Nombre</label><input id="lp-nombre" value="${lista?.nombre || ''}" /></div>
+      <div class="field"><label><input type="checkbox" id="lp-activo" ${lista?.activo !== false ? 'checked' : ''} /> Activa</label></div>
+    `,
+    async (backdrop, close) => {
+      const nombre = backdrop.querySelector('#lp-nombre').value.trim();
+      if (!nombre) { toast('El nombre es obligatorio', 'err'); return; }
+      try {
+        if (isEdit) await api.listasPrecio.update(lista.id, { nombre, activo: backdrop.querySelector('#lp-activo').checked });
+        else await api.listasPrecio.create({ nombre, activo: backdrop.querySelector('#lp-activo').checked });
+        toast('Lista de precio guardada');
+        close();
+        loadListasPrecio(container);
+      } catch (e) { toast(e.message, 'err'); }
+    },
+    isEdit ? async (close) => {
+      if (!confirm(`¿Eliminar la lista "${lista.nombre}"?`)) return;
+      try { await api.listasPrecio.remove(lista.id); toast('Eliminada'); close(); loadListasPrecio(container); }
+      catch (e) { toast(e.message, 'err'); }
+    } : null
+  );
 }
 
 async function loadProfesionales(container) {
@@ -130,21 +183,39 @@ function openProfesionalModal(prof, container) {
 
 function openServicioModal(serv, container) {
   const isEdit = !!serv;
+  const preciosPorLista = serv?.precios_por_lista || {};
+  const listasActivas = catalogoListasPrecio.filter((l) => l.activo !== false);
   smallModal(isEdit ? 'Editar servicio' : 'Nuevo servicio', `
       <div class="field"><label>Nombre</label><input id="sv-nombre" value="${serv?.nombre || ''}" /></div>
       <div class="field"><label>Categoría</label><input id="sv-categoria" value="${serv?.categoria || ''}" /></div>
       <div class="row">
         <div class="field"><label>Duración (min)</label><input type="number" id="sv-duracion" value="${serv?.duracion_min ?? 30}" /></div>
-        <div class="field"><label>Precio</label><input type="number" id="sv-precio" value="${serv?.precio ?? 0}" /></div>
+        <div class="field"><label>Precio base</label><input type="number" id="sv-precio" value="${serv?.precio ?? 0}" /></div>
       </div>
+      ${listasActivas.length > 0 ? `
+        <div class="field">
+          <label>Precio por lista (dejar vacío para usar el precio base)</label>
+          ${listasActivas.map((l) => `
+            <div class="row" style="align-items:center; margin-bottom:4px;">
+              <span style="flex:1; font-size:0.88rem;">${l.nombre}</span>
+              <input type="number" data-lista-precio="${l.id}" value="${preciosPorLista[l.id] ?? ''}" placeholder="$" style="width:110px;" />
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
       <div class="field"><label><input type="checkbox" id="sv-activo" ${serv?.activo !== false ? 'checked' : ''} /> Activo</label></div>
     `,
     async (backdrop, close) => {
+      const nuevosPrecios = {};
+      backdrop.querySelectorAll('[data-lista-precio]').forEach((inp) => {
+        if (inp.value.trim() !== '') nuevosPrecios[inp.dataset.listaPrecio] = Number(inp.value) || 0;
+      });
       const payload = {
         nombre: backdrop.querySelector('#sv-nombre').value.trim(),
         categoria: backdrop.querySelector('#sv-categoria').value.trim(),
         duracion_min: Number(backdrop.querySelector('#sv-duracion').value) || 30,
         precio: Number(backdrop.querySelector('#sv-precio').value) || 0,
+        precios_por_lista: nuevosPrecios,
         activo: backdrop.querySelector('#sv-activo').checked
       };
       if (!payload.nombre) { toast('El nombre es obligatorio', 'err'); return; }
