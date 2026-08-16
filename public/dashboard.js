@@ -31,6 +31,10 @@ async function renderDashboard(container) {
         <div style="color:var(--muted); font-size:0.8rem;">Stock bajo</div>
         <div style="font-size:1.6rem; font-weight:700; color:${stockAlertas.length > 0 ? 'var(--danger)' : 'inherit'}">${stockAlertas.length}</div>
       </div>
+      <div class="card" id="dash-pendientes-card" style="flex:1; cursor:pointer;">
+        <div style="color:var(--muted); font-size:0.8rem;">Pendientes de cobro</div>
+        <div style="font-size:1.6rem; font-weight:700; color:${resumen.pendientesDeCobro > 0 ? 'var(--danger)' : 'inherit'}">${resumen.pendientesDeCobro}</div>
+      </div>
     </div>
 
     <div class="row" style="gap:14px; align-items:flex-start;">
@@ -76,15 +80,34 @@ async function renderDashboard(container) {
     container.querySelector('#dash-stock-card').style.cursor = 'default';
   }
 
-  onStockChange((table) => {
-    if (!container.isConnected || table !== 'productos') return;
-    api.stock.alertas().then((alertas) => {
-      if (!container.isConnected) return;
-      const el = container.querySelector('#dash-stock-card > div:last-child');
-      if (el) {
-        el.textContent = alertas.length;
-        el.style.color = alertas.length > 0 ? 'var(--danger)' : 'inherit';
-      }
-    });
+  const puedeVerFacturacion = currentUser.rol === 'admin' || (currentUser.permisos || []).includes('facturacion');
+  if (puedeVerFacturacion) {
+    container.querySelector('#dash-pendientes-card').onclick = () => switchView('facturacion');
+  } else {
+    container.querySelector('#dash-pendientes-card').style.cursor = 'default';
+  }
+
+  onSync((table) => {
+    if (!container.isConnected) return;
+    if (table === 'productos') {
+      api.stock.alertas().then((alertas) => {
+        if (!container.isConnected) return;
+        const el = container.querySelector('#dash-stock-card > div:last-child');
+        if (el) {
+          el.textContent = alertas.length;
+          el.style.color = alertas.length > 0 ? 'var(--danger)' : 'inherit';
+        }
+      });
+    }
+    if (table === 'ventas') {
+      api.resumen.get(fecha).then((r) => {
+        if (!container.isConnected) return;
+        const el = container.querySelector('#dash-pendientes-card > div:last-child');
+        if (el) {
+          el.textContent = r.pendientesDeCobro;
+          el.style.color = r.pendientesDeCobro > 0 ? 'var(--danger)' : 'inherit';
+        }
+      });
+    }
   });
 }

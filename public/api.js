@@ -19,7 +19,9 @@ const api = {
     remove: (id) => apiRequest('DELETE', `/api/clientes/${id}`),
     addTratamiento: (id, data) => apiRequest('POST', `/api/clientes/${id}/tratamientos`, data),
     puntosHistorial: (id) => apiRequest('GET', `/api/clientes/${id}/puntos`),
-    ajustarPuntos: (id, data) => apiRequest('POST', `/api/clientes/${id}/puntos`, data)
+    ajustarPuntos: (id, data) => apiRequest('POST', `/api/clientes/${id}/puntos`, data),
+    cuentaCorrienteHistorial: (id) => apiRequest('GET', `/api/clientes/${id}/cuenta-corriente`),
+    ajustarCuentaCorriente: (id, data) => apiRequest('POST', `/api/clientes/${id}/cuenta-corriente`, data)
   },
   tratamientos: {
     remove: (id) => apiRequest('DELETE', `/api/tratamientos/${id}`)
@@ -67,7 +69,8 @@ const api = {
     list: (params) => apiRequest('GET', `/api/ventas?${new URLSearchParams(params)}`),
     get: (id) => apiRequest('GET', `/api/ventas/${id}`),
     create: (data) => apiRequest('POST', '/api/ventas', data),
-    remove: (id) => apiRequest('DELETE', `/api/ventas/${id}`)
+    remove: (id) => apiRequest('DELETE', `/api/ventas/${id}`),
+    cobrar: (id, data) => apiRequest('PUT', `/api/ventas/${id}/cobrar`, data)
   },
   egresos: {
     list: (params) => apiRequest('GET', `/api/egresos?${new URLSearchParams(params)}`),

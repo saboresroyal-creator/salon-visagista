@@ -27,7 +27,7 @@ const app = express();
 // solo "cambió esta tabla") por un canal de Supabase Realtime Broadcast; el
 // browser se conecta directo a Supabase (bypassea esta función) y al recibirlo
 // vuelve a pedir los datos por la API normal, que ya respeta permisos.
-const syncChannel = supabase.channel('stock-sync');
+const syncChannel = supabase.channel('app-sync');
 syncChannel.subscribe();
 function notifyChange(table) {
   syncChannel.send({ type: 'broadcast', event: 'change', payload: { table } }).catch(() => {});
@@ -136,7 +136,7 @@ app.get('/api/stock/alertas', async (req, res) => {
 // operaciones de edición quedan detrás del permiso del módulo dueño del dato.
 app.use('/api/agenda', requireModule('calendario'));
 app.use('/api/turnos', requireModule('calendario'));
-app.use('/api/ventas', requireModule('facturacion'));
+app.use('/api/ventas', requireAnyModule('facturacion', 'comandas'));
 app.use('/api/egresos', requireModule('egresos'));
 app.use('/api/resumen', requireModule('dashboard'));
 app.use('/api/reportes', requireModule('reportes'));
@@ -293,6 +293,41 @@ app.post('/api/clientes/:id/puntos', requireModule('clientes'), async (req, res)
   if (movError) return res.status(500).json({ error: movError.message });
 
   res.json({ puntos: nuevoBalance, movimiento });
+});
+
+// ── Cuenta corriente ──
+app.get('/api/clientes/:id/cuenta-corriente', async (req, res) => {
+  const { id } = req.params;
+  const { data, error } = await supabase
+    .from('cuenta_corriente_movimientos').select('*').eq('cliente_id', id).order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.post('/api/clientes/:id/cuenta-corriente', requireModule('clientes'), async (req, res) => {
+  const { id } = req.params;
+  const monto = Number(req.body.monto);
+  if (!Number.isFinite(monto) || monto === 0) {
+    return res.status(400).json({ error: 'El monto debe ser un número distinto de cero' });
+  }
+  const tipo = ['cargo', 'pago', 'ajuste'].includes(req.body.tipo) ? req.body.tipo : 'ajuste';
+  // Un pago reduce lo que debe la clienta; un cargo/ajuste positivo lo aumenta.
+  const delta = tipo === 'pago' ? -Math.abs(monto) : monto;
+
+  const { data: cliente, error: clienteError } = await supabase.from('clientes').select('saldo_cta_cte').eq('id', id).single();
+  if (clienteError) return res.status(404).json({ error: 'Cliente no encontrado' });
+
+  const nuevoBalance = (cliente.saldo_cta_cte || 0) + delta;
+  const { error: updateError } = await supabase.from('clientes').update({ saldo_cta_cte: nuevoBalance }).eq('id', id);
+  if (updateError) return res.status(500).json({ error: updateError.message });
+
+  const { data: movimiento, error: movError } = await supabase
+    .from('cuenta_corriente_movimientos')
+    .insert([{ cliente_id: id, tipo, monto: delta, motivo: req.body.motivo || null }])
+    .select().single();
+  if (movError) return res.status(500).json({ error: movError.message });
+
+  res.json({ saldo_cta_cte: nuevoBalance, movimiento });
 });
 
 // ── Profesionales ──
@@ -565,13 +600,93 @@ app.delete('/api/turnos/:id', async (req, res) => {
 });
 
 // ── Ventas (facturación) ──
-const VENTA_SELECT = '*, clientes(id,nombre,telefono), venta_items(*)';
+const VENTA_SELECT = '*, clientes(id,nombre,telefono), venta_items(*), venta_pagos(*)';
+
+async function descontarStockItems(itemRows) {
+  for (const it of itemRows) {
+    if (it.tipo === 'producto' && it.referencia_id) {
+      const { data: prod } = await supabase.from('productos').select('stock').eq('id', it.referencia_id).single();
+      if (prod) {
+        await supabase.from('productos').update({ stock: Math.max(0, prod.stock - it.cantidad) }).eq('id', it.referencia_id);
+        notifyChange('productos');
+      }
+    }
+  }
+}
+
+async function reponerStockItems(items) {
+  for (const it of items || []) {
+    if (it.tipo === 'producto' && it.referencia_id) {
+      const { data: prod } = await supabase.from('productos').select('stock').eq('id', it.referencia_id).single();
+      if (prod) {
+        await supabase.from('productos').update({ stock: prod.stock + it.cantidad }).eq('id', it.referencia_id);
+        notifyChange('productos');
+      }
+    }
+  }
+}
+
+async function otorgarPuntosPorVenta(clienteId, total, ventaId) {
+  const puntosGanados = Math.floor(total / 1000);
+  if (puntosGanados <= 0) return;
+  const { data: cliente } = await supabase.from('clientes').select('puntos').eq('id', clienteId).single();
+  if (!cliente) return;
+  await supabase.from('clientes').update({ puntos: (cliente.puntos || 0) + puntosGanados }).eq('id', clienteId);
+  await supabase.from('puntos_movimientos').insert([{
+    cliente_id: clienteId, tipo: 'ganado', puntos: puntosGanados, motivo: 'Venta', venta_id: ventaId
+  }]);
+}
+
+async function aplicarCargoCtaCte(clienteId, monto, ventaId) {
+  const { data: cliente } = await supabase.from('clientes').select('saldo_cta_cte').eq('id', clienteId).single();
+  if (!cliente) return;
+  await supabase.from('clientes').update({ saldo_cta_cte: (cliente.saldo_cta_cte || 0) + monto }).eq('id', clienteId);
+  await supabase.from('cuenta_corriente_movimientos').insert([{
+    cliente_id: clienteId, tipo: 'cargo', monto, motivo: 'Venta', venta_id: ventaId
+  }]);
+}
+
+// Valida los pagos de una venta antes de escribir nada en la base: que sumen
+// el total, y que si hay un pago "Cta Cte" haya una clienta elegida. Se
+// llama ANTES de crear la venta cuando se cobra en el momento (para no dejar
+// una venta "cobrada" a medio armar si el pago no cierra), y antes de
+// guardar los pagos al confirmar el cobro de una comanda pendiente.
+function validarPagos(pagos, clienteId, total) {
+  if (!Array.isArray(pagos) || pagos.length === 0) {
+    throw new Error('Tenés que indicar al menos un método de pago');
+  }
+  const sumaPagos = pagos.reduce((s, p) => s + (Number(p.monto) || 0), 0);
+  if (Math.abs(sumaPagos - total) > 0.01) {
+    throw new Error(`Los pagos suman $${sumaPagos.toFixed(2)} pero el total es $${total.toFixed(2)}`);
+  }
+  if (pagos.some((p) => p.metodo === 'Cta Cte') && !clienteId) {
+    throw new Error('Para pagar con Cta Cte hay que elegir una clienta');
+  }
+}
+
+// Inserta venta_pagos y aplica el cargo a cuenta corriente por los pagos
+// "Cta Cte". Asume que validarPagos() ya se llamó con éxito.
+async function guardarPagos(ventaId, pagos, clienteId) {
+  const { error: pagosError } = await supabase.from('venta_pagos').insert(
+    pagos.map((p) => ({ venta_id: ventaId, metodo: p.metodo, monto: Number(p.monto) || 0 }))
+  );
+  if (pagosError) throw new Error(pagosError.message);
+
+  for (const p of pagos) {
+    if (p.metodo === 'Cta Cte' && Number(p.monto) > 0) {
+      await aplicarCargoCtaCte(clienteId, Number(p.monto), ventaId);
+    }
+  }
+
+  return pagos.length > 1 ? 'Mixto' : pagos[0].metodo;
+}
 
 app.get('/api/ventas', async (req, res) => {
-  const { desde, hasta } = req.query;
+  const { desde, hasta, estado } = req.query;
   let query = supabase.from('ventas').select(VENTA_SELECT).order('fecha', { ascending: false }).order('created_at', { ascending: false });
   if (desde) query = query.gte('fecha', desde);
   if (hasta) query = query.lte('fecha', hasta);
+  if (estado) query = query.eq('estado', estado);
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
@@ -589,6 +704,7 @@ app.post('/api/ventas', async (req, res) => {
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'La venta necesita al menos un ítem' });
   }
+  const estado = req.body.estado === 'pendiente' ? 'pendiente' : 'cobrada';
 
   const itemRows = items.map((it) => ({
     tipo: it.tipo,
@@ -596,17 +712,30 @@ app.post('/api/ventas', async (req, res) => {
     descripcion: it.descripcion,
     cantidad: it.cantidad || 1,
     precio_unitario: it.precio_unitario || 0,
-    subtotal: (it.cantidad || 1) * (it.precio_unitario || 0)
+    subtotal: (it.cantidad || 1) * (it.precio_unitario || 0),
+    profesional_diag_id: it.profesional_diag_id || null,
+    profesional_asist_id: it.profesional_asist_id || null
   }));
   const total = itemRows.reduce((sum, it) => sum + it.subtotal, 0);
-
   const ventaPayload = {
     turno_id: req.body.turno_id || null,
     cliente_id: req.body.cliente_id || null,
     fecha: req.body.fecha || new Date().toISOString().slice(0, 10),
-    metodo_pago: req.body.metodo_pago || null,
+    estado,
+    metodo_pago: null,
     total
   };
+
+  // Si se cobra en el momento, se valida el pago ANTES de escribir nada:
+  // así un pago que no cierra no deja una venta "cobrada" a medio armar
+  // (sin método de pago) que igual contaría en el total del día.
+  if (estado === 'cobrada') {
+    try {
+      validarPagos(req.body.pagos, ventaPayload.cliente_id, total);
+    } catch (e) {
+      return res.status(400).json({ error: e.message });
+    }
+  }
 
   const { data: venta, error: ventaError } = await supabase.from('ventas').insert([ventaPayload]).select().single();
   if (ventaError) return res.status(500).json({ error: ventaError.message });
@@ -616,34 +745,45 @@ app.post('/api/ventas', async (req, res) => {
     .insert(itemRows.map((it) => ({ ...it, venta_id: venta.id })));
   if (itemsError) return res.status(500).json({ error: itemsError.message });
 
-  for (const it of itemRows) {
-    if (it.tipo === 'producto' && it.referencia_id) {
-      const { data: prod } = await supabase.from('productos').select('stock').eq('id', it.referencia_id).single();
-      if (prod) {
-        await supabase.from('productos').update({ stock: Math.max(0, prod.stock - it.cantidad) }).eq('id', it.referencia_id);
-      }
-    }
+  // El producto se descuenta del stock apenas se usa, sea cual sea el
+  // estado de cobro: si la venta queda pendiente y después se rechaza,
+  // DELETE /api/ventas/:id lo repone.
+  await descontarStockItems(itemRows);
+
+  if (estado === 'cobrada') {
+    const metodoResumen = await guardarPagos(venta.id, req.body.pagos, ventaPayload.cliente_id);
+    await supabase.from('ventas').update({ metodo_pago: metodoResumen }).eq('id', venta.id);
+    if (ventaPayload.cliente_id) await otorgarPuntosPorVenta(ventaPayload.cliente_id, total, venta.id);
   }
 
-  if (ventaPayload.cliente_id) {
-    const puntosGanados = Math.floor(total / 1000);
-    if (puntosGanados > 0) {
-      const { data: cliente } = await supabase.from('clientes').select('puntos').eq('id', ventaPayload.cliente_id).single();
-      if (cliente) {
-        await supabase.from('clientes').update({ puntos: (cliente.puntos || 0) + puntosGanados }).eq('id', ventaPayload.cliente_id);
-        await supabase.from('puntos_movimientos').insert([{
-          cliente_id: ventaPayload.cliente_id, tipo: 'ganado', puntos: puntosGanados, motivo: 'Venta', venta_id: venta.id
-        }]);
-      }
-    }
-  }
-
+  notifyChange('ventas');
   const { data: full, error: fullError } = await supabase.from('ventas').select(VENTA_SELECT).eq('id', venta.id).single();
   if (fullError) return res.status(500).json({ error: fullError.message });
   res.json(full);
 });
 
-app.delete('/api/ventas/:id', async (req, res) => {
+app.put('/api/ventas/:id/cobrar', requireModule('facturacion'), async (req, res) => {
+  const { id } = req.params;
+  const { data: venta, error: ventaError } = await supabase.from('ventas').select('*').eq('id', id).single();
+  if (ventaError || !venta) return res.status(404).json({ error: 'Venta no encontrada' });
+  if (venta.estado !== 'pendiente') return res.status(400).json({ error: 'Esta venta ya fue cobrada' });
+
+  try {
+    validarPagos(req.body.pagos, venta.cliente_id, Number(venta.total));
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+  const metodoResumen = await guardarPagos(id, req.body.pagos, venta.cliente_id);
+  await supabase.from('ventas').update({ estado: 'cobrada', metodo_pago: metodoResumen }).eq('id', id);
+  if (venta.cliente_id) await otorgarPuntosPorVenta(venta.cliente_id, Number(venta.total), id);
+
+  notifyChange('ventas');
+  const { data: full, error: fullError } = await supabase.from('ventas').select(VENTA_SELECT).eq('id', id).single();
+  if (fullError) return res.status(500).json({ error: fullError.message });
+  res.json(full);
+});
+
+app.delete('/api/ventas/:id', requireModule('facturacion'), async (req, res) => {
   const { id } = req.params;
 
   const { data: movimientos } = await supabase
@@ -655,8 +795,21 @@ app.delete('/api/ventas/:id', async (req, res) => {
     }
   }
 
+  const { data: cargosCtaCte } = await supabase
+    .from('cuenta_corriente_movimientos').select('cliente_id, monto').eq('venta_id', id).eq('tipo', 'cargo');
+  for (const c of cargosCtaCte || []) {
+    const { data: cliente } = await supabase.from('clientes').select('saldo_cta_cte').eq('id', c.cliente_id).single();
+    if (cliente) {
+      await supabase.from('clientes').update({ saldo_cta_cte: (cliente.saldo_cta_cte || 0) - c.monto }).eq('id', c.cliente_id);
+    }
+  }
+
+  const { data: items } = await supabase.from('venta_items').select('tipo, referencia_id, cantidad').eq('venta_id', id);
+  await reponerStockItems(items);
+
   const { error } = await supabase.from('ventas').delete().eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
+  notifyChange('ventas');
   res.json({ ok: true });
 });
 
@@ -708,10 +861,11 @@ app.delete('/api/egresos/:id', async (req, res) => {
 app.get('/api/resumen', async (req, res) => {
   const fecha = req.query.fecha || new Date().toISOString().slice(0, 10);
 
-  const [turnosRes, ventasRes, egresosRes] = await Promise.all([
+  const [turnosRes, ventasRes, egresosRes, pendientesRes] = await Promise.all([
     supabase.from('turnos').select(TURNO_SELECT).eq('fecha', fecha).order('hora_inicio', { ascending: true }),
-    supabase.from('ventas').select('total').eq('fecha', fecha),
-    supabase.from('egresos').select('monto').eq('fecha', fecha)
+    supabase.from('ventas').select('total').eq('fecha', fecha).eq('estado', 'cobrada'),
+    supabase.from('egresos').select('monto').eq('fecha', fecha),
+    supabase.from('ventas').select('id', { count: 'exact', head: true }).eq('estado', 'pendiente')
   ]);
 
   if (turnosRes.error) return res.status(500).json({ error: turnosRes.error.message });
@@ -727,7 +881,8 @@ app.get('/api/resumen', async (req, res) => {
     ventasTotal,
     egresosTotal,
     balance: ventasTotal - egresosTotal,
-    cantidadVentas: ventasRes.data.length
+    cantidadVentas: ventasRes.data.length,
+    pendientesDeCobro: pendientesRes.count || 0
   });
 });
 
@@ -736,7 +891,7 @@ app.get('/api/reportes', async (req, res) => {
   const hasta = req.query.hasta || new Date().toISOString().slice(0, 10);
 
   const [ventasRes, egresosRes, clientesNuevosRes, clientesTotalRes] = await Promise.all([
-    supabase.from('ventas').select('fecha,total,metodo_pago,cliente_id').gte('fecha', desde).lte('fecha', hasta),
+    supabase.from('ventas').select('id,fecha,total,cliente_id').eq('estado', 'cobrada').gte('fecha', desde).lte('fecha', hasta),
     supabase.from('egresos').select('fecha,monto,categoria').gte('fecha', desde).lte('fecha', hasta),
     supabase.from('clientes').select('id', { count: 'exact', head: true }).gte('created_at', desde).lte('created_at', `${hasta}T23:59:59`),
     supabase.from('clientes').select('id', { count: 'exact', head: true })
@@ -752,10 +907,15 @@ app.get('/api/reportes', async (req, res) => {
   const cantidadVentas = ventasRes.data.length;
   const ticketPromedio = cantidadVentas > 0 ? ventasTotal / cantidadVentas : 0;
 
+  const ventaIds = ventasRes.data.map((v) => v.id);
   const porMetodo = {};
-  for (const v of ventasRes.data) {
-    const m = v.metodo_pago || 'Sin especificar';
-    porMetodo[m] = (porMetodo[m] || 0) + Number(v.total);
+  if (ventaIds.length > 0) {
+    const { data: pagos, error: pagosError } = await supabase.from('venta_pagos').select('metodo,monto').in('venta_id', ventaIds);
+    if (pagosError) return res.status(500).json({ error: pagosError.message });
+    for (const p of pagos || []) {
+      const m = p.metodo || 'Sin especificar';
+      porMetodo[m] = (porMetodo[m] || 0) + Number(p.monto);
+    }
   }
 
   const porCategoria = {};

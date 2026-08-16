@@ -3,7 +3,7 @@ const TIPO_LABEL = { entrada: 'Entrada', salida: 'Salida', ajuste: 'Ajuste' };
 async function renderStock(container) {
   container.innerHTML = '<p>Cargando...</p>';
   await reloadStock(container, false);
-  onStockChange((table) => {
+  onSync((table) => {
     if (!container.isConnected) return;
     if (table === 'productos' || table === 'stock_movimientos') reloadStock(container, false);
   });

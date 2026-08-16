@@ -1,7 +1,13 @@
 let facturacionState = { fecha: new Date().toISOString().slice(0, 10) };
+const METODOS_PAGO = ['Efectivo', 'Débito', 'Crédito', 'Cta Cte', 'Cheque', 'Transferencia'];
 
 async function renderFacturacion(container) {
   container.innerHTML = `
+    <div class="card" style="margin-bottom:16px;" id="fa-pendientes-card">
+      <h2 style="margin-top:0; font-size:1rem;">Pendientes de cobro</h2>
+      <div id="fa-pendientes"><p>Cargando...</p></div>
+    </div>
+
     <div class="cal-toolbar">
       <input type="date" id="fa-fecha" value="${facturacionState.fecha}" />
       <div style="flex:1"></div>
@@ -17,13 +23,48 @@ async function renderFacturacion(container) {
   };
   container.querySelector('#fa-nueva').onclick = () => openVentaModal(container);
 
-  await loadVentasDelDia(container);
+  await Promise.all([loadPendientes(container), loadVentasDelDia(container)]);
+
+  onSync((table) => {
+    if (!container.isConnected || table !== 'ventas') return;
+    loadPendientes(container);
+    loadVentasDelDia(container);
+  });
+}
+
+async function loadPendientes(container) {
+  const box = container.querySelector('#fa-pendientes');
+  const ventas = await api.ventas.list({ estado: 'pendiente' });
+  if (!container.isConnected) return;
+
+  box.innerHTML = ventas.length === 0 ? '<p style="color:var(--muted)">No hay comandas esperando cobro.</p>' : `
+    <table class="data-table">
+      <thead><tr><th>Clienta</th><th>Ítems</th><th>Total</th><th></th></tr></thead>
+      <tbody>
+        ${ventas.map((v) => `
+          <tr data-id="${v.id}">
+            <td>${v.clientes?.nombre || 'Consumidor final'}</td>
+            <td>${(v.venta_items || []).map((i) => `${i.descripcion} x${i.cantidad}`).join(', ')}</td>
+            <td>$${Number(v.total).toFixed(2)}</td>
+            <td><button class="primary" data-cobrar="${v.id}" type="button">Cobrar</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+  box.querySelectorAll('[data-cobrar]').forEach((btn) => {
+    btn.onclick = () => {
+      const venta = ventas.find((v) => v.id === btn.dataset.cobrar);
+      openCobrarModal(venta, container);
+    };
+  });
 }
 
 async function loadVentasDelDia(container) {
   const box = container.querySelector('#fa-lista');
   const resumenBox = container.querySelector('#fa-resumen');
-  const ventas = await api.ventas.list({ desde: facturacionState.fecha, hasta: facturacionState.fecha });
+  const ventas = await api.ventas.list({ desde: facturacionState.fecha, hasta: facturacionState.fecha, estado: 'cobrada' });
+  if (!container.isConnected) return;
 
   const total = ventas.reduce((s, v) => s + Number(v.total), 0);
   resumenBox.innerHTML = `<b>${ventas.length}</b> venta(s) · Total del día: <b>$${total.toFixed(2)}</b>`;
@@ -60,6 +101,128 @@ async function loadVentasDelDia(container) {
   });
 }
 
+// Editor de pago dividido: uno o más renglones de método + monto que tienen
+// que sumar el total. Se usa tanto para cobrar una comanda pendiente como
+// para el flujo directo de "+ Nueva venta".
+function crearEditorPagos(mountEl, totalInicial, onCtaCteToggle) {
+  let total = totalInicial;
+  let pagos = [{ metodo: 'Efectivo', monto: total }];
+
+  function renderResumen() {
+    const suma = pagos.reduce((s, p) => s + (Number(p.monto) || 0), 0);
+    const falta = Math.round((total - suma) * 100) / 100;
+    const resumenEl = mountEl.querySelector('#pg-resumen');
+    if (Math.abs(falta) < 0.01) {
+      resumenEl.textContent = 'Total cubierto';
+      resumenEl.style.color = 'var(--muted)';
+    } else {
+      resumenEl.textContent = falta > 0 ? `Falta cobrar: $${falta.toFixed(2)}` : `Sobran $${Math.abs(falta).toFixed(2)}`;
+      resumenEl.style.color = 'var(--danger)';
+    }
+    if (onCtaCteToggle) onCtaCteToggle(pagos.some((p) => p.metodo === 'Cta Cte'));
+  }
+
+  function renderFilas() {
+    const filasBox = mountEl.querySelector('#pg-filas');
+    filasBox.innerHTML = pagos.map((p, i) => `
+      <div class="row" style="align-items:center; margin-bottom:6px;">
+        <select data-i="${i}" data-field="metodo" style="flex:1;">
+          ${METODOS_PAGO.map((m) => `<option value="${m}" ${p.metodo === m ? 'selected' : ''}>${m}</option>`).join('')}
+        </select>
+        <input type="number" step="0.01" data-i="${i}" data-field="monto" value="${p.monto}" style="width:110px;" />
+        ${pagos.length > 1 ? `<button type="button" data-remove="${i}" style="border:none;background:none;color:var(--danger);cursor:pointer;">×</button>` : ''}
+      </div>
+    `).join('');
+    filasBox.querySelectorAll('select').forEach((el) => {
+      el.onchange = () => { pagos[Number(el.dataset.i)].metodo = el.value; renderResumen(); };
+    });
+    filasBox.querySelectorAll('input').forEach((el) => {
+      el.oninput = () => { pagos[Number(el.dataset.i)].monto = Number(el.value) || 0; renderResumen(); };
+    });
+    filasBox.querySelectorAll('[data-remove]').forEach((btn) => {
+      btn.onclick = () => { pagos.splice(Number(btn.dataset.remove), 1); renderFilas(); renderResumen(); };
+    });
+  }
+
+  mountEl.innerHTML = `
+    <div id="pg-filas"></div>
+    <button type="button" class="secondary" id="pg-agregar" style="margin-bottom:6px;">+ Otro método</button>
+    <p id="pg-resumen" style="text-align:right; font-size:0.85rem; margin:4px 0 0;"></p>
+  `;
+  mountEl.querySelector('#pg-agregar').onclick = () => {
+    const sumaActual = pagos.reduce((s, p) => s + (Number(p.monto) || 0), 0);
+    pagos.push({ metodo: 'Efectivo', monto: Math.max(0, Math.round((total - sumaActual) * 100) / 100) });
+    renderFilas();
+    renderResumen();
+  };
+  renderFilas();
+  renderResumen();
+
+  return {
+    getPagos: () => pagos.filter((p) => p.monto !== 0),
+    // El total puede cambiar si se edita un ítem después de armar el pago;
+    // esto solo actualiza el "falta cobrar", no toca lo que ya se cargó.
+    setTotal: (nuevoTotal) => { total = nuevoTotal; renderResumen(); }
+  };
+}
+
+async function mostrarInfoCtaCte(infoBox, clienteId) {
+  if (!clienteId) {
+    infoBox.style.display = 'block';
+    infoBox.style.color = 'var(--danger)';
+    infoBox.textContent = 'Para pagar con Cta Cte hay que elegir una clienta.';
+    return;
+  }
+  const cliente = await api.clientes.get(clienteId);
+  infoBox.style.display = 'block';
+  infoBox.style.color = 'var(--muted)';
+  infoBox.textContent = `Saldo actual de la clienta en cuenta corriente: $${Number(cliente.saldo_cta_cte || 0).toFixed(2)}`;
+}
+
+async function openCobrarModal(venta, container) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal" style="width:520px;">
+      <h2 style="margin-top:0;">Cobrar comanda</h2>
+      <p style="margin-top:-8px; color:var(--muted);">${venta.clientes?.nombre || 'Consumidor final'}</p>
+      <table class="data-table" style="margin-bottom:10px;">
+        <thead><tr><th>Ítem</th><th>Cant.</th><th>Precio</th></tr></thead>
+        <tbody>
+          ${(venta.venta_items || []).map((it) => `<tr><td>${it.descripcion}</td><td>${it.cantidad}</td><td>$${Number(it.precio_unitario).toFixed(2)}</td></tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="text-align:right; font-weight:600; margin-bottom:10px;">Total: $${Number(venta.total).toFixed(2)}</div>
+      <div id="cb-cta-cte-info" style="display:none; font-size:0.82rem; margin-bottom:8px;"></div>
+      <div id="cb-pagos"></div>
+      <div class="modal-actions">
+        <button class="secondary" id="cb-cancelar">Cancelar</button>
+        <button class="primary" id="cb-confirmar">Confirmar cobro</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  const close = () => backdrop.remove();
+  backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
+  backdrop.querySelector('#cb-cancelar').onclick = close;
+
+  const infoBox = backdrop.querySelector('#cb-cta-cte-info');
+  const editor = crearEditorPagos(backdrop.querySelector('#cb-pagos'), Number(venta.total), (usaCtaCte) => {
+    if (!usaCtaCte) { infoBox.style.display = 'none'; return; }
+    mostrarInfoCtaCte(infoBox, venta.cliente_id);
+  });
+
+  backdrop.querySelector('#cb-confirmar').onclick = async () => {
+    try {
+      await api.ventas.cobrar(venta.id, { pagos: editor.getPagos() });
+      toast('Cobro confirmado');
+      close();
+      loadPendientes(container);
+      loadVentasDelDia(container);
+    } catch (e) { toast(e.message, 'err'); }
+  };
+}
+
 async function openVentaModal(container) {
   const [servicios, productos] = await Promise.all([api.servicios.list(), api.productos.list()]);
   let clienteSeleccionado = null;
@@ -91,23 +254,18 @@ async function openVentaModal(container) {
         <div id="vm-items"></div>
       </div>
 
-      <div class="row">
-        <div class="field">
-          <label>Fecha</label>
-          <input type="date" id="vm-fecha" value="${facturacionState.fecha}" />
-        </div>
-        <div class="field">
-          <label>Método de pago</label>
-          <select id="vm-metodo">
-            <option value="Efectivo">Efectivo</option>
-            <option value="Transferencia">Transferencia</option>
-            <option value="Débito">Débito</option>
-            <option value="Crédito">Crédito</option>
-          </select>
-        </div>
+      <div class="field">
+        <label>Fecha</label>
+        <input type="date" id="vm-fecha" value="${facturacionState.fecha}" />
       </div>
 
       <div style="text-align:right; font-weight:600; margin-top:8px;">Total: $<span id="vm-total">0.00</span></div>
+
+      <div class="field" style="margin-top:10px;">
+        <label>Pago</label>
+        <div id="vm-cta-cte-info" style="display:none; font-size:0.82rem; margin-bottom:6px;"></div>
+        <div id="vm-pagos"></div>
+      </div>
 
       <div class="modal-actions">
         <button class="secondary" id="vm-cancelar">Cancelar</button>
@@ -119,6 +277,16 @@ async function openVentaModal(container) {
   const close = () => backdrop.remove();
   backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
   backdrop.querySelector('#vm-cancelar').onclick = close;
+
+  let editorPagos = null;
+  function renderEditorPagos() {
+    const total = items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
+    const infoBox = backdrop.querySelector('#vm-cta-cte-info');
+    editorPagos = crearEditorPagos(backdrop.querySelector('#vm-pagos'), total, (usaCtaCte) => {
+      if (!usaCtaCte) { infoBox.style.display = 'none'; return; }
+      mostrarInfoCtaCte(infoBox, clienteSeleccionado?.id);
+    });
+  }
 
   function renderItems() {
     const box = backdrop.querySelector('#vm-items');
@@ -144,6 +312,7 @@ async function openVentaModal(container) {
   function updateTotal() {
     const total = items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
     backdrop.querySelector('#vm-total').textContent = total.toFixed(2);
+    if (editorPagos) editorPagos.setTotal(total);
   }
 
   backdrop.querySelector('#vm-item-add').onchange = (e) => {
@@ -187,7 +356,8 @@ async function openVentaModal(container) {
       await api.ventas.create({
         cliente_id: clienteSeleccionado?.id || null,
         fecha: backdrop.querySelector('#vm-fecha').value,
-        metodo_pago: backdrop.querySelector('#vm-metodo').value,
+        estado: 'cobrada',
+        pagos: editorPagos.getPagos(),
         items
       });
       toast('Venta registrada');
@@ -195,4 +365,7 @@ async function openVentaModal(container) {
       loadVentasDelDia(container);
     } catch (e) { toast(e.message, 'err'); }
   };
+
+  renderItems();
+  renderEditorPagos();
 }

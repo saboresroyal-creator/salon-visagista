@@ -4,6 +4,7 @@ const MODULES = [
   { key: 'clientes', label: 'Clientes', render: renderClientes },
   { key: 'catalogo', label: 'Servicios & Equipo', render: renderCatalogo },
   { key: 'stock', label: 'Stock', render: renderStock },
+  { key: 'comandas', label: 'Comandas', render: renderComandas },
   { key: 'facturacion', label: 'Facturación', render: renderFacturacion },
   { key: 'egresos', label: 'Egresos', render: renderEgresos },
   { key: 'reportes', label: 'Reportes', render: renderReportes },
