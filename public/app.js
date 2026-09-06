@@ -2,18 +2,18 @@
 // permisos en sí (uno o varios por módulo) se administran centralizados
 // en Permisos por Rol, ya no se tildan por usuario.
 const MODULES = [
-  { key: 'dashboard', label: 'Panel de Control', verPermiso: 'dashboard:ver', render: renderDashboard },
-  { key: 'calendario', label: 'Calendario', verPermiso: 'calendario:ver', render: renderCalendario },
-  { key: 'clientes', label: 'Clientes', verPermiso: 'clientes:ver', render: renderClientes },
-  { key: 'catalogo', label: 'Servicios & Equipo', verPermiso: 'catalogo:ver', render: renderCatalogo },
-  { key: 'stock', label: 'Stock', verPermiso: 'stock:ver', render: renderStock },
-  { key: 'comandas', label: 'Comandas', verPermiso: 'comandas:crear', render: renderComandas },
-  { key: 'mis-turnos', label: 'Mis turnos', verPermiso: 'comandas:cargar_propia', render: renderMisTurnos },
-  { key: 'facturacion', label: 'Facturación', verPermiso: 'facturacion:ver', render: renderFacturacion },
-  { key: 'egresos', label: 'Egresos', verPermiso: 'egresos:ver', render: renderEgresos },
-  { key: 'reportes', label: 'Reportes', verPermiso: 'reportes:ver', render: renderReportes },
-  { key: 'marketing', label: 'Marketing', verPermiso: 'marketing:ver', render: renderMarketing },
-  { key: 'comisiones', label: 'Comisiones', verPermiso: ['comisiones:ver', 'comisiones:ver_propias'], render: renderComisiones }
+  { key: 'dashboard', label: 'Panel de Control', icon: '📊', verPermiso: 'dashboard:ver', render: renderDashboard },
+  { key: 'calendario', label: 'Calendario', icon: '📅', verPermiso: 'calendario:ver', render: renderCalendario },
+  { key: 'clientes', label: 'Clientes', icon: '👥', verPermiso: 'clientes:ver', render: renderClientes },
+  { key: 'catalogo', label: 'Servicios & Equipo', icon: '🧰', verPermiso: 'catalogo:ver', render: renderCatalogo },
+  { key: 'stock', label: 'Stock', icon: '📦', verPermiso: 'stock:ver', render: renderStock },
+  { key: 'comandas', label: 'Comandas', icon: '🧾', verPermiso: 'comandas:crear', render: renderComandas },
+  { key: 'mis-turnos', label: 'Mis turnos', icon: '✅', verPermiso: 'comandas:cargar_propia', render: renderMisTurnos },
+  { key: 'facturacion', label: 'Facturación', icon: '💳', verPermiso: 'facturacion:ver', render: renderFacturacion },
+  { key: 'egresos', label: 'Egresos', icon: '💸', verPermiso: 'egresos:ver', render: renderEgresos },
+  { key: 'reportes', label: 'Reportes', icon: '📈', verPermiso: 'reportes:ver', render: renderReportes },
+  { key: 'marketing', label: 'Marketing', icon: '📣', verPermiso: 'marketing:ver', render: renderMarketing },
+  { key: 'comisiones', label: 'Comisiones', icon: '💰', verPermiso: ['comisiones:ver', 'comisiones:ver_propias'], render: renderComisiones }
 ];
 
 let currentUser = null;
@@ -27,8 +27,8 @@ function tienePermisoModulo(user, verPermiso) {
 function visibleModulesFor(user) {
   const mods = user.rol === 'admin' ? MODULES.slice() : MODULES.filter((m) => tienePermisoModulo(user, m.verPermiso));
   if (user.rol === 'admin') {
-    mods.push({ key: 'usuarios', label: 'Usuarios', render: renderUsuarios });
-    mods.push({ key: 'permisos-roles', label: 'Permisos por Rol', render: renderPermisosRoles });
+    mods.push({ key: 'usuarios', label: 'Usuarios', icon: '👤', render: renderUsuarios });
+    mods.push({ key: 'permisos-roles', label: 'Permisos por Rol', icon: '🔐', render: renderPermisosRoles });
   }
   return mods;
 }
@@ -36,21 +36,22 @@ function visibleModulesFor(user) {
 function renderNav() {
   const nav = document.getElementById('tabs');
   const mods = visibleModulesFor(currentUser);
-  nav.innerHTML = mods.map((m) =>
-    `<button data-view="${m.key}" class="${m.key === currentView ? 'active' : ''}">${m.label}</button>`
-  ).join('');
+  nav.innerHTML = mods.map((m) => `
+    <button data-view="${m.key}" class="${m.key === currentView ? 'active' : ''}">
+      <span class="nav-icon">${m.icon || '•'}</span><span class="nav-label">${m.label}</span>
+    </button>
+  `).join('');
   nav.querySelectorAll('button').forEach((btn) => {
     btn.onclick = () => switchView(btn.dataset.view);
   });
 
+  const footer = document.getElementById('sidebar-footer');
   if (!document.getElementById('logout-btn')) {
     const btn = document.createElement('button');
     btn.id = 'logout-btn';
-    btn.className = 'secondary';
-    btn.style.marginLeft = '10px';
     btn.textContent = `Salir (${currentUser.nombre})`;
     btn.onclick = async () => { await api.auth.logout(); boot(); };
-    document.querySelector('header.topbar').appendChild(btn);
+    footer.appendChild(btn);
   }
 }
 

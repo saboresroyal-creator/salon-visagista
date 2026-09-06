@@ -11,11 +11,17 @@
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <img class="logo" src="/logo.png" alt="Salón Visagista" />
-    <nav class="tabs" id="tabs"></nav>
-  </header>
-  <main id="view"></main>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <img src="/logo.png" alt="Salón Visagista" />
+        <span>Salón Visagista</span>
+      </div>
+      <nav class="sidebar-nav" id="tabs"></nav>
+      <div class="sidebar-footer" id="sidebar-footer"></div>
+    </aside>
+    <main id="view"></main>
+  </div>
 
   <script src="/api.js"></script>
   <script src="/scanner.js"></script>
