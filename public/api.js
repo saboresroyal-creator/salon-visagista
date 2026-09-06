@@ -33,7 +33,9 @@ const api = {
     list: () => apiRequest('GET', '/api/profesionales'),
     create: (data) => apiRequest('POST', '/api/profesionales', data),
     update: (id, data) => apiRequest('PUT', `/api/profesionales/${id}`, data),
-    remove: (id) => apiRequest('DELETE', `/api/profesionales/${id}`)
+    remove: (id) => apiRequest('DELETE', `/api/profesionales/${id}`),
+    horarios: (id) => apiRequest('GET', `/api/profesionales/${id}/horarios`),
+    guardarHorarios: (id, horarios) => apiRequest('PUT', `/api/profesionales/${id}/horarios`, { horarios })
   },
   servicios: {
     list: () => apiRequest('GET', '/api/servicios'),
@@ -75,8 +77,18 @@ const api = {
     list: (params) => apiRequest('GET', `/api/ventas?${new URLSearchParams(params)}`),
     get: (id) => apiRequest('GET', `/api/ventas/${id}`),
     create: (data) => apiRequest('POST', '/api/ventas', data),
+    update: (id, data) => apiRequest('PUT', `/api/ventas/${id}`, data),
     remove: (id) => apiRequest('DELETE', `/api/ventas/${id}`),
     cobrar: (id, data) => apiRequest('PUT', `/api/ventas/${id}/cobrar`, data)
+  },
+  misTurnos: {
+    list: (fecha) => apiRequest('GET', `/api/mis-turnos${fecha ? `?fecha=${fecha}` : ''}`)
+  },
+  comandas: {
+    crear: (data) => apiRequest('POST', '/api/comandas', data)
+  },
+  comisiones: {
+    get: (params) => apiRequest('GET', `/api/comisiones?${new URLSearchParams(params)}`)
   },
   egresos: {
     list: (params) => apiRequest('GET', `/api/egresos?${new URLSearchParams(params)}`),

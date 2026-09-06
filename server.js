@@ -74,7 +74,7 @@ async function requireAuth(req, res, next) {
     permisos = (rp || []).map((r) => r.permiso);
   }
 
-  req.user = { id: userData.user.id, email: userData.user.email, nombre: perfil.nombre, rol: perfil.rol, permisos };
+  req.user = { id: userData.user.id, email: userData.user.email, nombre: perfil.nombre, rol: perfil.rol, permisos, profesional_id: perfil.profesional_id || null };
   next();
 }
 
@@ -125,6 +125,168 @@ app.get('/api/auth/me', requireAuth, (req, res) => res.json(req.user));
 
 app.get('/api/realtime-config', requireAuth, (req, res) => {
   res.json({ url: supabaseUrl, anonKey: supabaseAnonKey });
+});
+
+// ── Reserva online (pública, sin login) ──
+// Le muestra a una clienta anónima los horarios libres de verdad (cruzando
+// profesionales_horarios con los turnos ya cargados) y crea el turno en
+// estado 'pendiente': el salón lo confirma o rechaza desde el Calendario.
+const RESERVA_SLOT_STEP_MIN = 15;
+const RESERVA_LEAD_MIN = 60;
+
+function horaToMin(hhmmss) {
+  const [h, m] = String(hhmmss).split(':').map(Number);
+  return h * 60 + m;
+}
+function minToHora(min) {
+  const h = String(Math.floor(min / 60)).padStart(2, '0');
+  const m = String(min % 60).padStart(2, '0');
+  return `${h}:${m}`;
+}
+// "Hoy" y la hora actual en horario de Argentina, no en UTC del server:
+// afecta directamente a una clienta reservando cerca de medianoche.
+function nowEnArgentina() {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+  });
+  const p = Object.fromEntries(fmt.formatToParts(new Date()).map((x) => [x.type, x.value]));
+  return { fecha: `${p.year}-${p.month}-${p.day}`, minutos: Number(p.hour) * 60 + Number(p.minute) };
+}
+
+async function computeSlots(profesionalId, duracionMin, fecha) {
+  const diaSemana = new Date(fecha + 'T00:00:00').getDay();
+  const { data: horario } = await supabase
+    .from('profesionales_horarios').select('*')
+    .eq('profesional_id', profesionalId).eq('dia_semana', diaSemana).maybeSingle();
+  if (!horario) return [];
+
+  const { data: existentes } = await supabase
+    .from('turnos').select('hora_inicio, hora_fin')
+    .eq('profesional_id', profesionalId).eq('fecha', fecha).neq('estado', 'cancelado');
+
+  const inicioHorario = horaToMin(horario.hora_inicio);
+  const finHorario = horaToMin(horario.hora_fin);
+  const ocupados = (existentes || []).map((t) => ({ inicio: horaToMin(t.hora_inicio), fin: horaToMin(t.hora_fin) }));
+  const { fecha: hoyFecha, minutos: minutosAhora } = nowEnArgentina();
+  const esHoy = fecha === hoyFecha;
+
+  const slots = [];
+  for (let t = inicioHorario; t + duracionMin <= finHorario; t += RESERVA_SLOT_STEP_MIN) {
+    const fin = t + duracionMin;
+    const solapa = ocupados.some((o) => o.inicio < fin && o.fin > t);
+    const muyPronto = esHoy && t < minutosAhora + RESERVA_LEAD_MIN;
+    if (!solapa && !muyPronto) slots.push({ hora_inicio: minToHora(t), hora_fin: minToHora(fin) });
+  }
+  return slots;
+}
+
+app.get('/api/publico/profesionales', async (req, res) => {
+  const { data, error } = await supabase.from('profesionales').select('id,nombre,color').eq('activo', true).order('nombre', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.get('/api/publico/servicios', async (req, res) => {
+  const { data, error } = await supabase.from('servicios').select('id,nombre,categoria,duracion_min,precio')
+    .eq('activo', true).eq('reservable_online', true).order('nombre', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.get('/api/publico/disponibilidad', async (req, res) => {
+  const { servicio_id, fecha, profesional_id } = req.query;
+  if (!servicio_id || !/^\d{4}-\d{2}-\d{2}$/.test(fecha || '')) {
+    return res.status(400).json({ error: 'servicio_id y fecha son obligatorios' });
+  }
+
+  const { data: servicio, error: servicioError } = await supabase.from('servicios').select('duracion_min')
+    .eq('id', servicio_id).eq('activo', true).eq('reservable_online', true).maybeSingle();
+  if (servicioError) return res.status(500).json({ error: servicioError.message });
+  if (!servicio) return res.status(404).json({ error: 'Servicio no disponible' });
+
+  if (profesional_id) {
+    const slots = await computeSlots(profesional_id, servicio.duracion_min, fecha);
+    return res.json({ fecha, slots });
+  }
+
+  const { data: activos, error: profesionalesError } = await supabase.from('profesionales').select('id').eq('activo', true);
+  if (profesionalesError) return res.status(500).json({ error: profesionalesError.message });
+
+  const porHora = {};
+  for (const p of activos || []) {
+    const slotsProf = await computeSlots(p.id, servicio.duracion_min, fecha);
+    for (const s of slotsProf) {
+      (porHora[s.hora_inicio] ||= { hora_inicio: s.hora_inicio, hora_fin: s.hora_fin, profesional_ids: [] }).profesional_ids.push(p.id);
+    }
+  }
+  const slots = Object.values(porHora).sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
+  res.json({ fecha, slots });
+});
+
+app.post('/api/publico/turnos', async (req, res) => {
+  const { nombre, telefono, email, servicio_id, profesional_id, fecha, hora_inicio, notas, sitio_web } = req.body;
+  // Honeypot anti-bots: un humano nunca completa este campo (está oculto por CSS).
+  if (sitio_web) return res.json({ ok: true });
+
+  if (!nombre || !telefono || !servicio_id || !/^\d{4}-\d{2}-\d{2}$/.test(fecha || '') || !/^\d{2}:\d{2}/.test(hora_inicio || '')) {
+    return res.status(400).json({ error: 'Faltan datos obligatorios' });
+  }
+
+  const { fecha: hoy } = nowEnArgentina();
+  if (fecha < hoy) return res.status(400).json({ error: 'Esa fecha ya pasó' });
+
+  const { data: servicio, error: servicioError } = await supabase.from('servicios').select('*')
+    .eq('id', servicio_id).eq('activo', true).eq('reservable_online', true).maybeSingle();
+  if (servicioError) return res.status(500).json({ error: servicioError.message });
+  if (!servicio) return res.status(400).json({ error: 'Ese servicio no está disponible para reservar' });
+
+  const horaInicio = hora_inicio.slice(0, 5);
+  const horaFin = minToHora(horaToMin(horaInicio) + servicio.duracion_min);
+
+  let candidatos;
+  if (profesional_id) {
+    candidatos = [profesional_id];
+  } else {
+    const { data: activos, error: activosError } = await supabase.from('profesionales').select('id').eq('activo', true);
+    if (activosError) return res.status(500).json({ error: activosError.message });
+    candidatos = (activos || []).map((p) => p.id);
+  }
+
+  // Se revalida server-side aunque la clienta ya haya visto la disponibilidad
+  // al elegir: evita que dos personas reserven el mismo hueco a la vez.
+  let elegido = null;
+  for (const pid of candidatos) {
+    const slots = await computeSlots(pid, servicio.duracion_min, fecha);
+    if (slots.some((s) => s.hora_inicio === horaInicio)) { elegido = pid; break; }
+  }
+  if (!elegido) return res.status(409).json({ error: 'Ese horario ya no está disponible, elegí otro' });
+
+  const telefonoNorm = normalizePhone(telefono);
+  if (!telefonoNorm) return res.status(400).json({ error: 'Teléfono inválido' });
+
+  let { data: cliente } = await supabase.from('clientes').select('id').eq('telefono', telefonoNorm).maybeSingle();
+  if (!cliente) {
+    const { data: nuevo, error: clienteError } = await supabase.from('clientes')
+      .insert([{ nombre, telefono: telefonoNorm, email: email || null }]).select('id').single();
+    if (clienteError) return res.status(500).json({ error: clienteError.message });
+    cliente = nuevo;
+  }
+
+  const { data: turno, error: turnoError } = await supabase.from('turnos').insert([{
+    cliente_id: cliente.id, profesional_id: elegido, fecha, hora_inicio: horaInicio, hora_fin: horaFin,
+    estado: 'pendiente', notas: notas || null, creado_por: 'reserva_online'
+  }]).select().single();
+  if (turnoError) return res.status(500).json({ error: turnoError.message });
+
+  const { error: servError } = await supabase.from('turno_servicios')
+    .insert([{ turno_id: turno.id, servicio_id: servicio.id, precio: servicio.precio }]);
+  if (servError) return res.status(500).json({ error: servError.message });
+
+  notifyChange('turnos');
+
+  const { data: profesional } = await supabase.from('profesionales').select('nombre').eq('id', elegido).single();
+  res.json({ ok: true, fecha, hora_inicio: horaInicio, hora_fin: horaFin, profesional_nombre: profesional?.nombre || '', servicio_nombre: servicio.nombre });
 });
 
 app.use('/api', requireAuth);
@@ -193,7 +355,12 @@ app.get('/api/clientes/:id', async (req, res) => {
     .from('tratamientos').select('*').eq('cliente_id', id).order('fecha', { ascending: false });
   if (tratamientosError) return res.status(500).json({ error: tratamientosError.message });
 
-  res.json({ ...cliente, tratamientos });
+  const { data: historialConsumos, error: historialError } = await supabase
+    .from('ventas').select('id,fecha,total,metodo_pago,profesionales(nombre),venta_items(tipo,descripcion,cantidad)')
+    .eq('cliente_id', id).eq('estado', 'cobrada').order('fecha', { ascending: false }).limit(20);
+  if (historialError) return res.status(500).json({ error: historialError.message });
+
+  res.json({ ...cliente, tratamientos, historialConsumos });
 });
 
 app.post('/api/clientes', async (req, res) => {
@@ -383,7 +550,7 @@ app.post('/api/profesionales', requirePermiso('catalogo:gestionar'), async (req,
   const nombre = (req.body.nombre || '').trim();
   if (!nombre) return res.status(400).json({ error: 'El nombre es obligatorio' });
 
-  const payload = { nombre, color: req.body.color || '#5b8def', activo: req.body.activo !== false };
+  const payload = { nombre, color: req.body.color || '#5b8def', activo: req.body.activo !== false, comision_pct: req.body.comision_pct || 0 };
   const { data, error } = await supabase.from('profesionales').insert([payload]).select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
@@ -392,7 +559,7 @@ app.post('/api/profesionales', requirePermiso('catalogo:gestionar'), async (req,
 app.put('/api/profesionales/:id', requirePermiso('catalogo:gestionar'), async (req, res) => {
   const { id } = req.params;
   const payload = {};
-  for (const key of ['nombre', 'color', 'activo']) {
+  for (const key of ['nombre', 'color', 'activo', 'comision_pct']) {
     if (req.body[key] !== undefined) payload[key] = req.body[key];
   }
   const { data, error } = await supabase.from('profesionales').update(payload).eq('id', id).select().single();
@@ -407,11 +574,42 @@ app.delete('/api/profesionales/:id', requirePermiso('catalogo:eliminar'), async 
   res.json({ ok: true });
 });
 
+// Horarios de trabajo (para la reserva online): un profesional puede no
+// tener fila para un día de la semana, lo que significa que ese día no atiende.
+app.get('/api/profesionales/:id/horarios', async (req, res) => {
+  const { data, error } = await supabase.from('profesionales_horarios').select('dia_semana,hora_inicio,hora_fin')
+    .eq('profesional_id', req.params.id).order('dia_semana', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.put('/api/profesionales/:id/horarios', requirePermiso('catalogo:gestionar'), async (req, res) => {
+  const { id } = req.params;
+  const horarios = Array.isArray(req.body.horarios) ? req.body.horarios : [];
+  const { error: delError } = await supabase.from('profesionales_horarios').delete().eq('profesional_id', id);
+  if (delError) return res.status(500).json({ error: delError.message });
+
+  if (horarios.length > 0) {
+    const rows = horarios.map((h) => ({ profesional_id: id, dia_semana: h.dia_semana, hora_inicio: h.hora_inicio, hora_fin: h.hora_fin }));
+    const { error: insError } = await supabase.from('profesionales_horarios').insert(rows);
+    if (insError) return res.status(500).json({ error: insError.message });
+  }
+  res.json({ ok: true });
+});
+
+// Un profesional puede elegir servicios/productos para su comanda, pero la
+// restricción de "no debe ver precios" tiene que ser real (a nivel de datos
+// que devuelve la API), no solo ocultada en la pantalla.
+function ocultarPrecios(rol) { return rol === 'profesional'; }
+
 // ── Servicios ──
 app.get('/api/servicios', async (req, res) => {
   const { data, error } = await supabase
     .from('servicios').select('*').order('nombre', { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
+  if (ocultarPrecios(req.user.rol)) {
+    return res.json(data.map(({ precio, precios_por_lista, ...s }) => s));
+  }
   res.json(data);
 });
 
@@ -425,7 +623,8 @@ app.post('/api/servicios', requirePermiso('catalogo:gestionar'), async (req, res
     duracion_min: req.body.duracion_min || 30,
     precio: req.body.precio || 0,
     precios_por_lista: req.body.precios_por_lista || {},
-    activo: req.body.activo !== false
+    activo: req.body.activo !== false,
+    reservable_online: req.body.reservable_online !== false
   };
   const { data, error } = await supabase.from('servicios').insert([payload]).select().single();
   if (error) return res.status(500).json({ error: error.message });
@@ -435,7 +634,7 @@ app.post('/api/servicios', requirePermiso('catalogo:gestionar'), async (req, res
 app.put('/api/servicios/:id', requirePermiso('catalogo:gestionar'), async (req, res) => {
   const { id } = req.params;
   const payload = {};
-  for (const key of ['nombre', 'categoria', 'duracion_min', 'precio', 'precios_por_lista', 'activo']) {
+  for (const key of ['nombre', 'categoria', 'duracion_min', 'precio', 'precios_por_lista', 'activo', 'reservable_online']) {
     if (req.body[key] !== undefined) payload[key] = req.body[key];
   }
   const { data, error } = await supabase.from('servicios').update(payload).eq('id', id).select().single();
@@ -487,6 +686,9 @@ app.get('/api/productos', async (req, res) => {
   const { data, error } = await supabase
     .from('productos').select('*').order('nombre', { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
+  if (ocultarPrecios(req.user.rol)) {
+    return res.json(data.map(({ precio, costo, ...p }) => p));
+  }
   res.json(data);
 });
 
@@ -593,11 +795,12 @@ app.post('/api/stock/movimientos', requirePermiso('stock:movimientos'), async (r
 const TURNO_SELECT = '*, clientes(id,nombre,telefono), profesionales(id,nombre,color), turno_servicios(id,precio,servicios(id,nombre,categoria))';
 
 app.get('/api/turnos', requirePermiso('calendario:ver'), async (req, res) => {
-  const { desde, hasta, profesional_id } = req.query;
+  const { desde, hasta, profesional_id, estado } = req.query;
   let query = supabase.from('turnos').select(TURNO_SELECT).order('fecha', { ascending: true }).order('hora_inicio', { ascending: true });
   if (desde) query = query.gte('fecha', desde);
   if (hasta) query = query.lte('fecha', hasta);
   if (profesional_id) query = query.eq('profesional_id', profesional_id);
+  if (estado) query = query.eq('estado', estado);
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
@@ -635,6 +838,7 @@ app.post('/api/turnos', requirePermiso('calendario:gestionar'), async (req, res)
 
   const { data: full, error: fullError } = await supabase.from('turnos').select(TURNO_SELECT).eq('id', turno.id).single();
   if (fullError) return res.status(500).json({ error: fullError.message });
+  notifyChange('turnos');
   res.json(full);
 });
 
@@ -663,6 +867,7 @@ app.put('/api/turnos/:id', requirePermiso('calendario:gestionar'), async (req, r
 
   const { data: full, error: fullError } = await supabase.from('turnos').select(TURNO_SELECT).eq('id', id).single();
   if (fullError) return res.status(500).json({ error: fullError.message });
+  notifyChange('turnos');
   res.json(full);
 });
 
@@ -670,7 +875,21 @@ app.delete('/api/turnos/:id', requirePermiso('calendario:gestionar'), async (req
   const { id } = req.params;
   const { error } = await supabase.from('turnos').delete().eq('id', id);
   if (error) return res.status(500).json({ error: error.message });
+  notifyChange('turnos');
   res.json({ ok: true });
+});
+
+// Agenda de la profesional logueada, sin precios: solo lo que necesita para
+// saber a quién atiende y qué le reservaron (no el detalle de facturación).
+app.get('/api/mis-turnos', requirePermiso('comandas:cargar_propia'), async (req, res) => {
+  if (!req.user.profesional_id) return res.status(403).json({ error: 'Tu usuario no está vinculado a ninguna profesional del equipo' });
+  const fecha = req.query.fecha || new Date().toISOString().slice(0, 10);
+  const { data, error } = await supabase.from('turnos')
+    .select('id,fecha,hora_inicio,hora_fin,estado,notas,clientes(id,nombre,telefono),turno_servicios(servicios(id,nombre,categoria))')
+    .eq('profesional_id', req.user.profesional_id).eq('fecha', fecha)
+    .order('hora_inicio', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 });
 
 // ── Ventas (facturación) ──
@@ -906,6 +1125,154 @@ app.delete('/api/ventas/:id', requirePermiso('facturacion:eliminar'), async (req
   res.json({ ok: true });
 });
 
+// Recepción puede ajustar el descuento o los ítems de una comanda antes de
+// cobrarla. Ya cobrada, es inmutable (para eso está DELETE si hay que anularla).
+app.put('/api/ventas/:id', requireAnyPermiso('facturacion:crear', 'facturacion:cobrar'), async (req, res) => {
+  const { id } = req.params;
+  const { data: venta, error: ventaError } = await supabase.from('ventas').select('*').eq('id', id).single();
+  if (ventaError || !venta) return res.status(404).json({ error: 'Venta no encontrada' });
+  if (venta.estado !== 'pendiente') return res.status(400).json({ error: 'Esta venta ya fue cobrada, no se puede editar' });
+
+  let subtotalVenta = Number(venta.subtotal) || 0;
+  if (Array.isArray(req.body.items)) {
+    const { data: itemsViejos } = await supabase.from('venta_items').select('tipo, referencia_id, cantidad').eq('venta_id', id);
+    await reponerStockItems(itemsViejos);
+
+    const { error: delError } = await supabase.from('venta_items').delete().eq('venta_id', id);
+    if (delError) return res.status(500).json({ error: delError.message });
+
+    const itemRows = req.body.items.map((it) => ({
+      tipo: it.tipo,
+      referencia_id: it.referencia_id || null,
+      descripcion: it.descripcion,
+      cantidad: it.cantidad || 1,
+      precio_unitario: it.precio_unitario || 0,
+      subtotal: (it.cantidad || 1) * (it.precio_unitario || 0),
+      profesional_diag_id: it.profesional_diag_id || null,
+      profesional_asist_id: it.profesional_asist_id || null
+    }));
+    const { error: insError } = await supabase.from('venta_items').insert(itemRows.map((it) => ({ ...it, venta_id: id })));
+    if (insError) return res.status(500).json({ error: insError.message });
+    await descontarStockItems(itemRows);
+
+    subtotalVenta = itemRows.reduce((sum, it) => sum + it.subtotal, 0);
+  }
+
+  const ajustePct = req.body.ajuste_pct !== undefined ? Number(req.body.ajuste_pct) || 0 : Number(venta.ajuste_pct) || 0;
+  const total = Math.round(subtotalVenta * (1 + ajustePct / 100) * 100) / 100;
+  const { error: updateError } = await supabase.from('ventas').update({ subtotal: subtotalVenta, ajuste_pct: ajustePct, total }).eq('id', id);
+  if (updateError) return res.status(500).json({ error: updateError.message });
+
+  notifyChange('ventas');
+  const { data: full, error: fullError } = await supabase.from('ventas').select(VENTA_SELECT).eq('id', id).single();
+  if (fullError) return res.status(500).json({ error: fullError.message });
+  res.json(full);
+});
+
+// Envío de la comanda desde el celular de la profesional: nunca recibe ni
+// devuelve precios. El servidor busca los precios reales en el catálogo,
+// nunca confía en lo que mande el cliente (acá ni siquiera se los pide).
+app.post('/api/comandas', requirePermiso('comandas:cargar_propia'), async (req, res) => {
+  if (!req.user.profesional_id) return res.status(403).json({ error: 'Tu usuario no está vinculado a ninguna profesional del equipo' });
+  const { turno_id, servicios, productos, observaciones } = req.body;
+  if (!turno_id) return res.status(400).json({ error: 'Falta el turno' });
+
+  const { data: turno, error: turnoError } = await supabase.from('turnos').select('*')
+    .eq('id', turno_id).eq('profesional_id', req.user.profesional_id).maybeSingle();
+  if (turnoError) return res.status(500).json({ error: turnoError.message });
+  if (!turno) return res.status(404).json({ error: 'Turno no encontrado' });
+  if (turno.estado === 'completado') return res.status(400).json({ error: 'Ese turno ya tiene una comanda enviada' });
+
+  const itemRows = [];
+  if (Array.isArray(servicios) && servicios.length > 0) {
+    const { data: catalogo, error: servError } = await supabase.from('servicios').select('id,nombre,precio').in('id', servicios);
+    if (servError) return res.status(500).json({ error: servError.message });
+    for (const s of catalogo || []) {
+      itemRows.push({
+        tipo: 'servicio', referencia_id: s.id, descripcion: s.nombre, cantidad: 1,
+        precio_unitario: Number(s.precio) || 0, subtotal: Number(s.precio) || 0,
+        profesional_diag_id: req.user.profesional_id, profesional_asist_id: null
+      });
+    }
+  }
+  if (Array.isArray(productos) && productos.length > 0) {
+    const ids = productos.map((p) => p.producto_id);
+    const { data: catalogo, error: prodError } = await supabase.from('productos').select('id,nombre,precio').in('id', ids);
+    if (prodError) return res.status(500).json({ error: prodError.message });
+    for (const p of productos) {
+      const prod = (catalogo || []).find((c) => c.id === p.producto_id);
+      if (!prod) continue;
+      const cantidad = Number(p.cantidad) || 1;
+      itemRows.push({
+        tipo: 'producto', referencia_id: prod.id, descripcion: prod.nombre, cantidad,
+        precio_unitario: Number(prod.precio) || 0, subtotal: cantidad * (Number(prod.precio) || 0),
+        profesional_diag_id: req.user.profesional_id, profesional_asist_id: null
+      });
+    }
+  }
+  if (itemRows.length === 0) return res.status(400).json({ error: 'Agregá al menos un servicio o producto' });
+
+  const subtotalVenta = itemRows.reduce((sum, it) => sum + it.subtotal, 0);
+  const { data: venta, error: ventaError } = await supabase.from('ventas').insert([{
+    turno_id, cliente_id: turno.cliente_id, atendido_por_id: req.user.profesional_id,
+    fecha: turno.fecha, estado: 'pendiente', subtotal: subtotalVenta, ajuste_pct: 0, total: subtotalVenta,
+    metodo_pago: null, notas: observaciones || null
+  }]).select().single();
+  if (ventaError) return res.status(500).json({ error: ventaError.message });
+
+  const { error: itemsError } = await supabase.from('venta_items').insert(itemRows.map((it) => ({ ...it, venta_id: venta.id })));
+  if (itemsError) return res.status(500).json({ error: itemsError.message });
+
+  await descontarStockItems(itemRows);
+  await supabase.from('turnos').update({ estado: 'completado' }).eq('id', turno_id);
+
+  notifyChange('ventas');
+  notifyChange('turnos');
+  res.json({ ok: true });
+});
+
+// Facturación generada y comisión por profesional, según su % configurado
+// en Catálogo. Un profesional sin permiso "ver todas" solo puede pedir la suya.
+app.get('/api/comisiones', requireAnyPermiso('comisiones:ver', 'comisiones:ver_propias'), async (req, res) => {
+  const desde = req.query.desde || new Date().toISOString().slice(0, 10);
+  const hasta = req.query.hasta || new Date().toISOString().slice(0, 10);
+  const puedeVerTodas = req.user.rol === 'admin' || req.user.permisos.includes('comisiones:ver');
+  let profesionalIdFiltro = req.query.profesional_id || null;
+  if (!puedeVerTodas) {
+    if (!req.user.profesional_id) return res.status(403).json({ error: 'Tu usuario no está vinculado a ninguna profesional del equipo' });
+    profesionalIdFiltro = req.user.profesional_id;
+  }
+
+  const { data: profesionales, error: profesionalesError } = await supabase.from('profesionales').select('id,nombre,comision_pct').eq('activo', true);
+  if (profesionalesError) return res.status(500).json({ error: profesionalesError.message });
+  const lista = profesionalIdFiltro ? (profesionales || []).filter((p) => p.id === profesionalIdFiltro) : (profesionales || []);
+
+  const { data: ventasCobradas, error: ventasError } = await supabase.from('ventas')
+    .select('id,ajuste_pct,venta_items(tipo,subtotal,profesional_diag_id)').eq('estado', 'cobrada').gte('fecha', desde).lte('fecha', hasta);
+  if (ventasError) return res.status(500).json({ error: ventasError.message });
+
+  // El descuento/recargo (ajuste_pct) se carga una sola vez por venta y se
+  // aplica parejo a todos sus ítems, así que la comisión se calcula sobre
+  // lo que realmente se cobró (después del descuento), no sobre precio de lista.
+  const items = (ventasCobradas || []).flatMap((v) =>
+    (v.venta_items || []).map((it) => ({ ...it, subtotalNeto: Number(it.subtotal) * (1 + (Number(v.ajuste_pct) || 0) / 100) }))
+  );
+  const resultado = lista.map((p) => {
+    const propios = items.filter((it) => it.profesional_diag_id === p.id);
+    const serviciosRealizados = propios.filter((it) => it.tipo === 'servicio').length;
+    const facturacionGenerada = propios.reduce((s, it) => s + it.subtotalNeto, 0);
+    const comisionPct = Number(p.comision_pct) || 0;
+    return {
+      profesional_id: p.id, profesional_nombre: p.nombre,
+      servicios_realizados: serviciosRealizados,
+      facturacion_generada: facturacionGenerada,
+      comision_pct: comisionPct,
+      comision: Math.round(facturacionGenerada * comisionPct) / 100
+    };
+  });
+  res.json(resultado);
+});
+
 // ── Egresos / Compras ──
 app.get('/api/egresos', requirePermiso('egresos:ver'), async (req, res) => {
   const { desde, hasta } = req.query;
@@ -954,11 +1321,12 @@ app.delete('/api/egresos/:id', requirePermiso('egresos:eliminar'), async (req, r
 app.get('/api/resumen', async (req, res) => {
   const fecha = req.query.fecha || new Date().toISOString().slice(0, 10);
 
-  const [turnosRes, ventasRes, egresosRes, pendientesRes] = await Promise.all([
+  const [turnosRes, ventasRes, egresosRes, pendientesRes, pendientesOnlineRes] = await Promise.all([
     supabase.from('turnos').select(TURNO_SELECT).eq('fecha', fecha).order('hora_inicio', { ascending: true }),
     supabase.from('ventas').select('total').eq('fecha', fecha).eq('estado', 'cobrada'),
     supabase.from('egresos').select('monto').eq('fecha', fecha),
-    supabase.from('ventas').select('id', { count: 'exact', head: true }).eq('estado', 'pendiente')
+    supabase.from('ventas').select('id', { count: 'exact', head: true }).eq('estado', 'pendiente'),
+    supabase.from('turnos').select('id', { count: 'exact', head: true }).eq('estado', 'pendiente').gte('fecha', fecha)
   ]);
 
   if (turnosRes.error) return res.status(500).json({ error: turnosRes.error.message });
@@ -975,7 +1343,8 @@ app.get('/api/resumen', async (req, res) => {
     egresosTotal,
     balance: ventasTotal - egresosTotal,
     cantidadVentas: ventasRes.data.length,
-    pendientesDeCobro: pendientesRes.count || 0
+    pendientesDeCobro: pendientesRes.count || 0,
+    turnosPendientesOnline: pendientesOnlineRes.count || 0
   });
 });
 
@@ -1172,7 +1541,8 @@ app.post('/api/usuarios', async (req, res) => {
       id: created.user.id,
       nombre,
       rol: ['admin', 'profesional', 'recepcionista', 'encargada', 'cajero'].includes(req.body.rol) ? req.body.rol : 'usuario',
-      permisos: Array.isArray(req.body.permisos) ? req.body.permisos : []
+      permisos: Array.isArray(req.body.permisos) ? req.body.permisos : [],
+      profesional_id: req.body.profesional_id || null
     }])
     .select().single();
 
@@ -1187,7 +1557,7 @@ app.post('/api/usuarios', async (req, res) => {
 app.put('/api/usuarios/:id', async (req, res) => {
   const { id } = req.params;
   const payload = {};
-  for (const key of ['nombre', 'rol', 'activo']) {
+  for (const key of ['nombre', 'rol', 'activo', 'profesional_id']) {
     if (req.body[key] !== undefined) payload[key] = req.body[key];
   }
 

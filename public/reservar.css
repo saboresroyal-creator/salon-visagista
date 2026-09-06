@@ -1,0 +1,115 @@
+body { min-height: 100vh; }
+
+.rsv-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 22px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.rsv-header img { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; }
+.rsv-header h1 { margin: 0; font-size: 1.15rem; }
+.rsv-header p { margin: 2px 0 0; color: var(--muted); font-size: 0.85rem; }
+
+.rsv-main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px 60px;
+  position: relative;
+  z-index: 1;
+}
+
+.rsv-steps {
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  gap: 6px;
+}
+.rsv-steps li {
+  flex: 1;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--muted);
+  padding-bottom: 10px;
+  border-bottom: 3px solid var(--border);
+  font-weight: 600;
+}
+.rsv-steps li.rsv-step-active { color: var(--accent-dark); border-color: var(--accent); }
+.rsv-steps li.rsv-step-done { color: var(--text); border-color: var(--accent); }
+
+.rsv-content { display: flex; flex-direction: column; gap: 14px; }
+
+.rsv-title { font-size: 1.05rem; font-weight: 700; margin: 0 0 2px; }
+.rsv-subtitle { color: var(--muted); font-size: 0.85rem; margin: 0 0 10px; }
+
+.rsv-cat-label { font-size: 0.78rem; font-weight: 600; color: var(--muted); margin: 12px 0 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+
+.rsv-card-grid { display: flex; flex-direction: column; gap: 10px; }
+
+.rsv-option-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: var(--text);
+  transition: border-color .15s, box-shadow .15s;
+}
+.rsv-option-card:hover { border-color: var(--accent); box-shadow: 0 2px 10px rgba(184,137,95,0.15); }
+.rsv-option-card b { display: block; font-size: 0.95rem; }
+.rsv-option-card span.rsv-meta { color: var(--muted); font-size: 0.8rem; }
+.rsv-option-card .rsv-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 700; font-size: 1rem; flex-shrink: 0;
+}
+
+.rsv-slots-day { margin-bottom: 4px; }
+.rsv-slots-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.rsv-slot-chip {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+}
+.rsv-slot-chip:hover { border-color: var(--accent); background: #fbf5ee; }
+.rsv-slot-chip.selected { background: var(--accent); border-color: var(--accent); color: white; }
+
+.rsv-form .field { margin-bottom: 14px; display: flex; flex-direction: column; gap: 4px; }
+.rsv-form label { font-size: 0.8rem; color: var(--muted); }
+.rsv-form input, .rsv-form textarea {
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 0.95rem; font-family: inherit;
+}
+.rsv-honeypot { position: absolute; left: -9999px; opacity: 0; height: 0; overflow: hidden; }
+
+.rsv-summary { background: #fbf5ee; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; font-size: 0.88rem; }
+.rsv-summary b { color: var(--accent-dark); }
+
+.rsv-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; }
+.rsv-actions button { padding: 12px 22px; font-size: 0.95rem; border-radius: 10px; }
+.rsv-actions button.primary { flex: 1; }
+
+.rsv-confirm { text-align: center; padding: 30px 10px; }
+.rsv-confirm .rsv-confirm-icon { font-size: 2.6rem; margin-bottom: 10px; }
+.rsv-confirm h2 { margin: 0 0 8px; }
+.rsv-confirm p { color: var(--muted); }
+
+.rsv-empty { color: var(--muted); text-align: center; padding: 20px 0; }
+.rsv-error { color: var(--danger); background: #fbeceb; border-radius: 10px; padding: 10px 14px; font-size: 0.88rem; }
+
+@media (max-width: 480px) {
+  .rsv-header img { width: 44px; height: 44px; }
+  .rsv-steps li { font-size: 0.68rem; }
+}

@@ -15,7 +15,8 @@ const PERMISOS_CATALOGO = [
   { grupo: 'Stock', clave: 'stock:ver', label: 'Ver stock e historial' },
   { grupo: 'Stock', clave: 'stock:movimientos', label: 'Registrar movimientos de stock' },
   { grupo: 'Stock', clave: 'stock:eliminar', label: 'Eliminar productos desde Stock' },
-  { grupo: 'Comandas', clave: 'comandas:crear', label: 'Cargar comandas' },
+  { grupo: 'Comandas', clave: 'comandas:crear', label: 'Cargar comandas (con precios, para mostrador)' },
+  { grupo: 'Comandas', clave: 'comandas:cargar_propia', label: 'Cargar comanda de sus propios turnos (sin precios)' },
   { grupo: 'Facturación', clave: 'facturacion:ver', label: 'Ver ventas' },
   { grupo: 'Facturación', clave: 'facturacion:cobrar', label: 'Cobrar comandas pendientes' },
   { grupo: 'Facturación', clave: 'facturacion:crear', label: 'Crear venta directa' },
@@ -25,7 +26,9 @@ const PERMISOS_CATALOGO = [
   { grupo: 'Egresos', clave: 'egresos:eliminar', label: 'Eliminar egresos' },
   { grupo: 'Reportes', clave: 'reportes:ver', label: 'Ver reportes' },
   { grupo: 'Marketing', clave: 'marketing:ver', label: 'Ver recordatorios' },
-  { grupo: 'Marketing', clave: 'marketing:enviar', label: 'Registrar mensajes enviados' }
+  { grupo: 'Marketing', clave: 'marketing:enviar', label: 'Registrar mensajes enviados' },
+  { grupo: 'Comisiones', clave: 'comisiones:ver', label: 'Ver comisiones de todo el equipo' },
+  { grupo: 'Comisiones', clave: 'comisiones:ver_propias', label: 'Ver su propia comisión' }
 ];
 
 // Administrador no aparece: bypasea todos los permisos, no necesita filas.

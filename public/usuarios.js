@@ -50,8 +50,9 @@ async function loadUsuarios(container) {
   }
 }
 
-function openUsuarioModal(usuario, container) {
+async function openUsuarioModal(usuario, container) {
   const isEdit = !!usuario;
+  const profesionales = (await api.profesionales.list()).filter((p) => p.activo !== false);
 
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
@@ -77,6 +78,15 @@ function openUsuarioModal(usuario, container) {
         <p style="font-size:0.78rem; color:var(--muted); margin:4px 0 0;">Qué puede hacer cada rol se administra en "Permisos por Rol".</p>
       </div>
 
+      <div class="field" id="um-vinculo-field" style="display:none;">
+        <label>Vincular a profesional (equipo)</label>
+        <select id="um-profesional-id">
+          <option value="">— Sin vincular —</option>
+          ${profesionales.map((p) => `<option value="${p.id}" ${usuario?.profesional_id === p.id ? 'selected' : ''}>${p.nombre}</option>`).join('')}
+        </select>
+        <p style="font-size:0.78rem; color:var(--muted); margin:4px 0 0;">Necesario para que vea sus propios turnos en "Mis turnos" y su comisión.</p>
+      </div>
+
       ${isEdit ? `
         <div class="field"><label><input type="checkbox" id="um-activo" ${usuario.activo !== false ? 'checked' : ''} /> Usuario activo</label></div>
       ` : ''}
@@ -93,11 +103,18 @@ function openUsuarioModal(usuario, container) {
   backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
   backdrop.querySelector('#um-cancelar').onclick = close;
 
+  const rolSelect = backdrop.querySelector('#um-rol');
+  const vinculoField = backdrop.querySelector('#um-vinculo-field');
+  const toggleVinculo = () => { vinculoField.style.display = rolSelect.value === 'profesional' ? 'flex' : 'none'; };
+  rolSelect.onchange = toggleVinculo;
+  toggleVinculo();
+
   backdrop.querySelector('#um-guardar').onclick = async () => {
     const nombre = backdrop.querySelector('#um-nombre').value.trim();
     const email = backdrop.querySelector('#um-email').value.trim();
     const password = backdrop.querySelector('#um-password').value;
-    const rol = backdrop.querySelector('#um-rol').value;
+    const rol = rolSelect.value;
+    const profesionalId = backdrop.querySelector('#um-profesional-id').value || null;
 
     if (!nombre || (!isEdit && (!email || !password))) {
       toast('Completá nombre, email y contraseña', 'err');
@@ -106,11 +123,11 @@ function openUsuarioModal(usuario, container) {
 
     try {
       if (isEdit) {
-        const payload = { nombre, rol, activo: backdrop.querySelector('#um-activo').checked };
+        const payload = { nombre, rol, activo: backdrop.querySelector('#um-activo').checked, profesional_id: profesionalId };
         if (password) payload.password = password;
         await api.usuarios.update(usuario.id, payload);
       } else {
-        await api.usuarios.create({ nombre, email, password, rol });
+        await api.usuarios.create({ nombre, email, password, rol, profesional_id: profesionalId });
       }
       toast('Usuario guardado');
       close();

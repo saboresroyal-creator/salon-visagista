@@ -183,7 +183,26 @@ input, select, textarea {
   cursor: pointer;
 }
 .cal-month-pill.cancelado { opacity: 0.5; text-decoration: line-through; }
+.cal-month-pill.pendiente { border: 2px dashed white; }
 .cal-month-more { font-size: 0.68rem; color: var(--muted); padding-left: 5px; }
+
+/* ── Calendario: turnos pendientes de reserva online ── */
+.cal-pendientes-strip {
+  background: #fbf5ee;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+}
+.cal-pendientes-header { font-weight: 600; font-size: 0.88rem; margin-bottom: 8px; }
+.cal-pendientes-list { display: flex; flex-direction: column; gap: 6px; }
+.cal-pendiente-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
+  font-size: 0.85rem;
+}
+.cal-pendiente-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.cal-pendiente-actions button { padding: 4px 10px; font-size: 0.8rem; }
 
 .cal-grid {
   display: grid;
@@ -252,6 +271,7 @@ input, select, textarea {
 }
 .cal-turno b { display: block; font-size: 0.75rem; }
 .cal-turno.cancelado { opacity: 0.5; text-decoration: line-through; }
+.cal-turno.pendiente { border: 2px dashed white; }
 
 /* ── Modal ── */
 .modal-backdrop {
@@ -317,4 +337,5 @@ table.data-table tr.stock-bajo td { background: #fbeceb; }
   .cal-toolbar { flex-wrap: wrap; }
   .cal-toolbar .date-label { min-width: 0; }
   .cal-prof-col, .cal-prof-header { min-width: 110px; }
+  .cal-pendiente-row { flex-direction: column; align-items: flex-start; }
 }

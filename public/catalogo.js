@@ -84,16 +84,63 @@ async function loadProfesionales(container) {
   const data = await api.profesionales.list();
   box.innerHTML = data.length === 0 ? '<p style="color:var(--muted)">Sin profesionales cargadas.</p>' : `
     <table class="data-table">
-      <thead><tr><th></th><th>Nombre</th><th>Estado</th></tr></thead>
+      <thead><tr><th></th><th>Nombre</th><th>Estado</th><th></th></tr></thead>
       <tbody>${data.map((p) => `
         <tr data-id="${p.id}">
           <td><span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:${p.color}"></span></td>
           <td>${p.nombre}</td>
           <td>${p.activo === false ? 'Inactiva' : 'Activa'}</td>
+          <td><button type="button" class="secondary" data-horarios="${p.id}">Horarios</button></td>
         </tr>`).join('')}</tbody>
     </table>`;
   box.querySelectorAll('tr[data-id]').forEach((row) => {
     row.onclick = () => openProfesionalModal(data.find((p) => p.id === row.dataset.id), container);
+  });
+  box.querySelectorAll('[data-horarios]').forEach((btn) => {
+    btn.onclick = (ev) => {
+      ev.stopPropagation();
+      openHorariosModal(data.find((p) => p.id === btn.dataset.horarios));
+    };
+  });
+}
+
+const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+async function openHorariosModal(prof) {
+  const actuales = await api.profesionales.horarios(prof.id);
+  const porDia = {};
+  actuales.forEach((h) => { porDia[h.dia_semana] = h; });
+
+  const fieldsHtml = `
+    <p style="color:var(--muted); font-size:0.8rem; margin-top:-6px;">Días y horarios en que ${prof.nombre} atiende — usado para la reserva online.</p>
+    ${DIAS_SEMANA.map((nombreDia, i) => {
+      const h = porDia[i];
+      return `
+        <div class="row" style="align-items:center; margin-bottom:6px;">
+          <label style="flex:1; display:flex; align-items:center; gap:6px; font-size:0.85rem;">
+            <input type="checkbox" data-dia-activo="${i}" ${h ? 'checked' : ''} /> ${nombreDia}
+          </label>
+          <input type="time" data-dia-inicio="${i}" value="${h?.hora_inicio?.slice(0, 5) || '09:00'}" style="width:110px;" />
+          <input type="time" data-dia-fin="${i}" value="${h?.hora_fin?.slice(0, 5) || '18:00'}" style="width:110px;" />
+        </div>`;
+    }).join('')}
+  `;
+
+  smallModal(`Horarios de ${prof.nombre}`, fieldsHtml, async (backdrop, close) => {
+    const horarios = [];
+    for (let i = 0; i < 7; i++) {
+      if (!backdrop.querySelector(`[data-dia-activo="${i}"]`).checked) continue;
+      horarios.push({
+        dia_semana: i,
+        hora_inicio: backdrop.querySelector(`[data-dia-inicio="${i}"]`).value,
+        hora_fin: backdrop.querySelector(`[data-dia-fin="${i}"]`).value
+      });
+    }
+    try {
+      await api.profesionales.guardarHorarios(prof.id, horarios);
+      toast('Horarios guardados');
+      close();
+    } catch (e) { toast(e.message, 'err'); }
   });
 }
 
@@ -156,12 +203,14 @@ function openProfesionalModal(prof, container) {
   smallModal(isEdit ? 'Editar profesional' : 'Nueva profesional', `
       <div class="field"><label>Nombre</label><input id="pf-nombre" value="${prof?.nombre || ''}" /></div>
       <div class="field"><label>Color en el calendario</label><input type="color" id="pf-color" value="${prof?.color || '#5b8def'}" /></div>
+      <div class="field"><label>% Comisión</label><input type="number" id="pf-comision" value="${prof?.comision_pct ?? 0}" /></div>
       <div class="field"><label><input type="checkbox" id="pf-activo" ${prof?.activo !== false ? 'checked' : ''} /> Activa</label></div>
     `,
     async (backdrop, close) => {
       const payload = {
         nombre: backdrop.querySelector('#pf-nombre').value.trim(),
         color: backdrop.querySelector('#pf-color').value,
+        comision_pct: Number(backdrop.querySelector('#pf-comision').value) || 0,
         activo: backdrop.querySelector('#pf-activo').checked
       };
       if (!payload.nombre) { toast('El nombre es obligatorio', 'err'); return; }
@@ -204,6 +253,7 @@ function openServicioModal(serv, container) {
         </div>
       ` : ''}
       <div class="field"><label><input type="checkbox" id="sv-activo" ${serv?.activo !== false ? 'checked' : ''} /> Activo</label></div>
+      <div class="field"><label><input type="checkbox" id="sv-reservable" ${serv?.reservable_online !== false ? 'checked' : ''} /> Reservable desde la página online</label></div>
     `,
     async (backdrop, close) => {
       const nuevosPrecios = {};
@@ -216,7 +266,8 @@ function openServicioModal(serv, container) {
         duracion_min: Number(backdrop.querySelector('#sv-duracion').value) || 30,
         precio: Number(backdrop.querySelector('#sv-precio').value) || 0,
         precios_por_lista: nuevosPrecios,
-        activo: backdrop.querySelector('#sv-activo').checked
+        activo: backdrop.querySelector('#sv-activo').checked,
+        reservable_online: backdrop.querySelector('#sv-reservable').checked
       };
       if (!payload.nombre) { toast('El nombre es obligatorio', 'err'); return; }
       try {

@@ -8,7 +8,8 @@ let calState = {
   viewMode: 'mes', // 'mes' | 'dia'
   date: new Date(),
   profesionales: [],
-  turnos: []
+  turnos: [],
+  pendientes: []
 };
 
 function fmtDateISO(d) {
@@ -44,6 +45,10 @@ async function renderCalendario(container) {
     return;
   }
   await reloadAndPaint(container);
+  onSync((table) => {
+    if (!container.isConnected || table !== 'turnos') return;
+    reloadAndPaint(container);
+  });
 }
 
 async function loadTurnosRange(desde, hasta) {
@@ -58,6 +63,9 @@ async function reloadAndPaint(container) {
     const iso = fmtDateISO(calState.date);
     await loadTurnosRange(iso, iso);
   }
+  // Los pendientes no se limitan al rango visible: una reserva online puede
+  // caer en cualquier fecha futura y el salón la tiene que ver igual.
+  calState.pendientes = await api.turnos.list({ estado: 'pendiente' });
   paint(container);
 }
 
@@ -71,6 +79,7 @@ function paint(container) {
   const activos = calState.profesionales.filter((p) => p.activo !== false);
 
   container.innerHTML = `
+    ${renderPendientesStrip()}
     <div class="cal-toolbar">
       <button class="secondary" id="cal-prev">‹</button>
       <button class="secondary" id="cal-today">Hoy</button>
@@ -94,6 +103,22 @@ function paint(container) {
   container.querySelector('#cal-nuevo').onclick = () => openTurnoModal({ fecha: fmtDateISO(calState.date) }, container);
   container.querySelector('#cal-view-mes').onclick = () => { calState.viewMode = 'mes'; reloadAndPaint(container); };
   container.querySelector('#cal-view-dia').onclick = () => { calState.viewMode = 'dia'; reloadAndPaint(container); };
+
+  container.querySelectorAll('[data-confirmar]').forEach((btn) => {
+    btn.onclick = async (ev) => {
+      ev.stopPropagation();
+      try { await api.turnos.update(btn.dataset.confirmar, { estado: 'confirmado' }); toast('Turno confirmado'); await reloadAndPaint(container); }
+      catch (e) { toast(e.message, 'err'); }
+    };
+  });
+  container.querySelectorAll('[data-rechazar]').forEach((btn) => {
+    btn.onclick = async (ev) => {
+      ev.stopPropagation();
+      if (!confirm('¿Rechazar este turno reservado online?')) return;
+      try { await api.turnos.update(btn.dataset.rechazar, { estado: 'cancelado' }); toast('Turno rechazado'); await reloadAndPaint(container); }
+      catch (e) { toast(e.message, 'err'); }
+    };
+  });
 
   if (activos.length === 0) return;
 
@@ -136,6 +161,26 @@ function paint(container) {
   }
 }
 
+function renderPendientesStrip() {
+  if (calState.pendientes.length === 0) return '';
+  return `
+    <div class="cal-pendientes-strip">
+      <div class="cal-pendientes-header">🔔 ${calState.pendientes.length} turno(s) reservado(s) online, pendiente(s) de confirmación</div>
+      <div class="cal-pendientes-list">
+        ${calState.pendientes.map((t) => `
+          <div class="cal-pendiente-row">
+            <span>${t.fecha} · ${t.hora_inicio.slice(0, 5)} · ${t.clientes?.nombre || ''} · ${t.profesionales?.nombre || ''}</span>
+            <span class="cal-pendiente-actions">
+              <button type="button" class="secondary" data-confirmar="${t.id}">Confirmar</button>
+              <button type="button" class="danger" data-rechazar="${t.id}">Rechazar</button>
+            </span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
 function renderMonthGrid(activos) {
   const days = getMonthGridDates(calState.date);
   const currentMonth = calState.date.getMonth();
@@ -163,7 +208,7 @@ function renderMonthGrid(activos) {
         <button type="button" class="cal-month-daynum ${iso === todayIso ? 'today' : ''}" data-fecha="${iso}">${d.getDate()}</button>
         <div class="cal-month-pills">
           ${visibles.map((t) => `
-            <div class="cal-month-pill ${t.estado === 'cancelado' ? 'cancelado' : ''}" data-id="${t.id}" style="background:${profColor[t.profesional_id] || '#5b8def'}">
+            <div class="cal-month-pill ${t.estado === 'cancelado' ? 'cancelado' : ''} ${t.estado === 'pendiente' ? 'pendiente' : ''}" data-id="${t.id}" style="background:${profColor[t.profesional_id] || '#5b8def'}">
               ${t.hora_inicio.slice(0, 5)} ${t.clientes?.nombre || ''}
             </div>
           `).join('')}
@@ -235,9 +280,9 @@ function renderTurnoBlock(t, color) {
   const clienteNombre = t.clientes?.nombre || '(sin cliente)';
 
   return `
-    <div class="cal-turno ${t.estado === 'cancelado' ? 'cancelado' : ''}" data-id="${t.id}"
+    <div class="cal-turno ${t.estado === 'cancelado' ? 'cancelado' : ''} ${t.estado === 'pendiente' ? 'pendiente' : ''}" data-id="${t.id}"
          style="top:${top}px; height:${height}px; background:${color || '#5b8def'}">
-      <b>${t.hora_inicio.slice(0, 5)} · ${clienteNombre}</b>
+      <b>${t.hora_inicio.slice(0, 5)} · ${clienteNombre}${t.estado === 'pendiente' ? ' (online)' : ''}</b>
       ${servNames || ''}
     </div>
   `;
@@ -305,6 +350,7 @@ async function openTurnoModal(turno, container) {
         <label>Estado</label>
         <select id="tm-estado">
           <option value="confirmado" ${turno.estado === 'confirmado' || !turno.estado ? 'selected' : ''}>Confirmado</option>
+          <option value="pendiente" ${turno.estado === 'pendiente' ? 'selected' : ''}>Pendiente (reserva online)</option>
           <option value="completado" ${turno.estado === 'completado' ? 'selected' : ''}>Completado</option>
           <option value="cancelado" ${turno.estado === 'cancelado' ? 'selected' : ''}>Cancelado</option>
         </select>

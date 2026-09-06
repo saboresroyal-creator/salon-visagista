@@ -1,5 +1,5 @@
 let facturacionState = { fecha: new Date().toISOString().slice(0, 10) };
-const METODOS_PAGO = ['Efectivo', 'Débito', 'Crédito', 'Cta Cte', 'Cheque', 'Transferencia'];
+const METODOS_PAGO = ['Efectivo', 'Débito', 'Crédito', 'MercadoPago', 'Cta Cte', 'Cheque', 'Transferencia', 'Otro'];
 
 async function renderFacturacion(container) {
   container.innerHTML = `
@@ -214,6 +214,10 @@ async function openCobrarModal(venta, container) {
       <p style="margin-top:-8px; color:var(--muted);">
         ${venta.clientes?.nombre || 'Consumidor final'}${venta.profesionales?.nombre ? ` · Atendido por ${venta.profesionales.nombre}` : ''}
       </p>
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <span style="font-size:0.8rem; color:var(--muted);">Detalle de la comanda</span>
+        <button type="button" class="secondary" id="cb-editar">Editar comanda</button>
+      </div>
       <table class="data-table" style="margin-bottom:10px;">
         <thead><tr><th>Ítem</th><th>Cant.</th><th>Precio</th></tr></thead>
         <tbody>
@@ -235,6 +239,11 @@ async function openCobrarModal(venta, container) {
   backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
   backdrop.querySelector('#cb-cancelar').onclick = close;
 
+  backdrop.querySelector('#cb-editar').onclick = () => {
+    close();
+    openEditarComandaModal(venta, container);
+  };
+
   const infoBox = backdrop.querySelector('#cb-cta-cte-info');
   const editor = crearEditorPagos(backdrop.querySelector('#cb-pagos'), Number(venta.total), (usaCtaCte) => {
     if (!usaCtaCte) { infoBox.style.display = 'none'; return; }
@@ -250,6 +259,107 @@ async function openCobrarModal(venta, container) {
       loadVentasDelDia(container);
     } catch (e) { toast(e.message, 'err'); }
   };
+}
+
+// Recepción puede ajustar el descuento/recargo y los ítems de una comanda
+// pendiente antes de cobrarla (por ejemplo, sacar algo que la profesional
+// cargó de más, o aplicar un descuento acordado con la clienta).
+async function openEditarComandaModal(venta, container) {
+  const [servicios, productos] = await Promise.all([api.servicios.list(), api.productos.list()]);
+  const items = (venta.venta_items || []).map((it) => ({ ...it }));
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal" style="width:560px;">
+      <h2>Editar comanda</h2>
+      <p style="margin-top:-8px; color:var(--muted);">${venta.clientes?.nombre || 'Consumidor final'}</p>
+
+      <div class="field">
+        <label>Agregar ítem</label>
+        <select id="ec-item-add">
+          <option value="">Elegir servicio o producto...</option>
+          <optgroup label="Servicios">
+            ${servicios.map((s) => `<option value="servicio:${s.id}" data-precio="${s.precio}" data-nombre="${s.nombre}">${s.nombre}</option>`).join('')}
+          </optgroup>
+          <optgroup label="Productos">
+            ${productos.map((p) => `<option value="producto:${p.id}" data-precio="${p.precio}" data-nombre="${p.nombre}">${p.nombre}</option>`).join('')}
+          </optgroup>
+        </select>
+        <div id="ec-items"></div>
+      </div>
+
+      <div class="field" style="max-width:220px; margin-left:auto;">
+        <label>Descuento / recargo (%)</label>
+        <input type="number" id="ec-ajuste-pct" value="${venta.ajuste_pct || 0}" placeholder="Ej: -10 ó 5" />
+      </div>
+      <div style="text-align:right; margin-top:4px;">
+        <div style="color:var(--muted); font-size:0.85rem;">Subtotal: $<span id="ec-subtotal">0.00</span></div>
+        <div style="font-weight:600; font-size:1.05rem;">Total: $<span id="ec-total">0.00</span></div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="secondary" id="ec-cancelar">Cancelar</button>
+        <button class="primary" id="ec-guardar">Guardar cambios</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  const close = () => backdrop.remove();
+  backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
+  backdrop.querySelector('#ec-cancelar').onclick = close;
+
+  function updateTotal() {
+    const subtotal = items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
+    const ajustePct = Number(backdrop.querySelector('#ec-ajuste-pct').value) || 0;
+    backdrop.querySelector('#ec-subtotal').textContent = subtotal.toFixed(2);
+    backdrop.querySelector('#ec-total').textContent = (subtotal * (1 + ajustePct / 100)).toFixed(2);
+  }
+
+  function renderItems() {
+    const box = backdrop.querySelector('#ec-items');
+    box.innerHTML = items.map((it, i) => `
+      <div class="row" style="align-items:center; margin-bottom:6px;">
+        <span style="flex:2;">${it.descripcion}</span>
+        <input type="number" min="1" value="${it.cantidad}" data-i="${i}" data-field="cantidad" style="width:60px;" />
+        <input type="number" value="${it.precio_unitario}" data-i="${i}" data-field="precio_unitario" style="width:90px;" />
+        <button type="button" data-remove="${i}" style="border:none;background:none;color:var(--danger);cursor:pointer;">×</button>
+      </div>
+    `).join('');
+    box.querySelectorAll('input').forEach((inp) => {
+      inp.oninput = () => { items[Number(inp.dataset.i)][inp.dataset.field] = Number(inp.value) || 0; updateTotal(); };
+    });
+    box.querySelectorAll('[data-remove]').forEach((btn) => {
+      btn.onclick = () => { items.splice(Number(btn.dataset.remove), 1); renderItems(); updateTotal(); };
+    });
+  }
+
+  backdrop.querySelector('#ec-item-add').onchange = (e) => {
+    const opt = e.target.selectedOptions[0];
+    if (!opt.value) return;
+    const [tipo, id] = opt.value.split(':');
+    items.push({ tipo, referencia_id: id, descripcion: opt.dataset.nombre, cantidad: 1, precio_unitario: Number(opt.dataset.precio) });
+    renderItems();
+    updateTotal();
+    e.target.value = '';
+  };
+  backdrop.querySelector('#ec-ajuste-pct').oninput = updateTotal;
+
+  backdrop.querySelector('#ec-guardar').onclick = async () => {
+    if (items.length === 0) { toast('La comanda necesita al menos un ítem', 'err'); return; }
+    try {
+      const actualizada = await api.ventas.update(venta.id, {
+        items,
+        ajuste_pct: Number(backdrop.querySelector('#ec-ajuste-pct').value) || 0
+      });
+      toast('Comanda actualizada');
+      close();
+      openCobrarModal(actualizada, container);
+    } catch (e) { toast(e.message, 'err'); }
+  };
+
+  renderItems();
+  updateTotal();
 }
 
 async function openVentaModal(container) {

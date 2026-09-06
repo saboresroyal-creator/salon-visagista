@@ -35,6 +35,10 @@ async function renderDashboard(container) {
         <div style="color:var(--muted); font-size:0.8rem;">Pendientes de cobro</div>
         <div style="font-size:1.6rem; font-weight:700; color:${resumen.pendientesDeCobro > 0 ? 'var(--danger)' : 'inherit'}">${resumen.pendientesDeCobro}</div>
       </div>
+      <div class="card" id="dash-pendientes-online-card" style="flex:1; cursor:pointer;">
+        <div style="color:var(--muted); font-size:0.8rem;">Turnos pendientes online</div>
+        <div style="font-size:1.6rem; font-weight:700; color:${resumen.turnosPendientesOnline > 0 ? 'var(--danger)' : 'inherit'}">${resumen.turnosPendientesOnline}</div>
+      </div>
     </div>
 
     <div class="row" style="gap:14px; align-items:flex-start;">
@@ -87,6 +91,13 @@ async function renderDashboard(container) {
     container.querySelector('#dash-pendientes-card').style.cursor = 'default';
   }
 
+  const puedeVerCalendario = currentUser.rol === 'admin' || (currentUser.permisos || []).includes('calendario:ver');
+  if (puedeVerCalendario) {
+    container.querySelector('#dash-pendientes-online-card').onclick = () => switchView('calendario');
+  } else {
+    container.querySelector('#dash-pendientes-online-card').style.cursor = 'default';
+  }
+
   onSync((table) => {
     if (!container.isConnected) return;
     if (table === 'productos') {
@@ -99,13 +110,18 @@ async function renderDashboard(container) {
         }
       });
     }
-    if (table === 'ventas') {
+    if (table === 'ventas' || table === 'turnos') {
       api.resumen.get(fecha).then((r) => {
         if (!container.isConnected) return;
-        const el = container.querySelector('#dash-pendientes-card > div:last-child');
-        if (el) {
-          el.textContent = r.pendientesDeCobro;
-          el.style.color = r.pendientesDeCobro > 0 ? 'var(--danger)' : 'inherit';
+        const elCobro = container.querySelector('#dash-pendientes-card > div:last-child');
+        if (elCobro) {
+          elCobro.textContent = r.pendientesDeCobro;
+          elCobro.style.color = r.pendientesDeCobro > 0 ? 'var(--danger)' : 'inherit';
+        }
+        const elOnline = container.querySelector('#dash-pendientes-online-card > div:last-child');
+        if (elOnline) {
+          elOnline.textContent = r.turnosPendientesOnline;
+          elOnline.style.color = r.turnosPendientesOnline > 0 ? 'var(--danger)' : 'inherit';
         }
       });
     }

@@ -96,6 +96,10 @@ function openClienteModal(cliente, container) {
 
       ${isEdit ? `
         <hr style="border-color:var(--border); margin:16px 0;" />
+        <h3 style="font-size:0.95rem;">Historial de consumos</h3>
+        <div id="cm-historial-consumos"></div>
+
+        <hr style="border-color:var(--border); margin:16px 0;" />
         <h3 style="font-size:0.95rem;">Historial de tratamientos</h3>
         <div id="cm-tratamientos"></div>
         <button class="secondary" id="cm-add-tratamiento" type="button" style="margin-top:8px;">+ Agregar tratamiento</button>
@@ -114,6 +118,7 @@ function openClienteModal(cliente, container) {
   backdrop.querySelector('#cm-cancelar').onclick = closeModal;
 
   if (isEdit) {
+    renderHistorialConsumos(backdrop, cliente);
     renderTratamientos(backdrop, cliente);
     backdrop.querySelector('#cm-add-tratamiento').onclick = () => openTratamientoModal(cliente, backdrop);
     backdrop.querySelector('#cm-ajustar-puntos').onclick = () => openAjustePuntosModal(cliente, backdrop, container);
@@ -152,6 +157,29 @@ function openClienteModal(cliente, container) {
       loadClientesList(container);
     } catch (e) { toast(e.message, 'err'); }
   };
+}
+
+function renderHistorialConsumos(backdrop, cliente) {
+  const box = backdrop.querySelector('#cm-historial-consumos');
+  if (!cliente.historialConsumos || cliente.historialConsumos.length === 0) {
+    box.innerHTML = '<p style="color:var(--muted); font-size:0.85rem;">Sin consumos registrados todavía.</p>';
+    return;
+  }
+  box.innerHTML = cliente.historialConsumos.map((v) => {
+    const servicios = (v.venta_items || []).filter((it) => it.tipo === 'servicio');
+    const productos = (v.venta_items || []).filter((it) => it.tipo === 'producto');
+    return `
+      <div class="card" style="margin-bottom:8px; padding:10px;">
+        <div class="row" style="align-items:center;">
+          <b style="flex:1;">${v.fecha}${v.profesionales?.nombre ? ` — ${v.profesionales.nombre}` : ''}</b>
+          <b>$${Number(v.total).toFixed(2)}</b>
+        </div>
+        ${servicios.length > 0 ? `<div style="font-size:0.82rem; color:var(--muted);">Servicios: ${servicios.map((s) => s.descripcion).join(', ')}</div>` : ''}
+        ${productos.length > 0 ? `<div style="font-size:0.82rem; color:var(--muted);">Productos: ${productos.map((p) => p.descripcion).join(', ')}</div>` : ''}
+        ${v.metodo_pago ? `<div style="font-size:0.78rem;">Forma de pago: ${v.metodo_pago}</div>` : ''}
+      </div>
+    `;
+  }).join('');
 }
 
 function renderTratamientos(backdrop, cliente) {

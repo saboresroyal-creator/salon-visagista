@@ -8,17 +8,24 @@ const MODULES = [
   { key: 'catalogo', label: 'Servicios & Equipo', verPermiso: 'catalogo:ver', render: renderCatalogo },
   { key: 'stock', label: 'Stock', verPermiso: 'stock:ver', render: renderStock },
   { key: 'comandas', label: 'Comandas', verPermiso: 'comandas:crear', render: renderComandas },
+  { key: 'mis-turnos', label: 'Mis turnos', verPermiso: 'comandas:cargar_propia', render: renderMisTurnos },
   { key: 'facturacion', label: 'Facturación', verPermiso: 'facturacion:ver', render: renderFacturacion },
   { key: 'egresos', label: 'Egresos', verPermiso: 'egresos:ver', render: renderEgresos },
   { key: 'reportes', label: 'Reportes', verPermiso: 'reportes:ver', render: renderReportes },
-  { key: 'marketing', label: 'Marketing', verPermiso: 'marketing:ver', render: renderMarketing }
+  { key: 'marketing', label: 'Marketing', verPermiso: 'marketing:ver', render: renderMarketing },
+  { key: 'comisiones', label: 'Comisiones', verPermiso: ['comisiones:ver', 'comisiones:ver_propias'], render: renderComisiones }
 ];
 
 let currentUser = null;
 let currentView = null;
 
+function tienePermisoModulo(user, verPermiso) {
+  const claves = Array.isArray(verPermiso) ? verPermiso : [verPermiso];
+  return claves.some((c) => (user.permisos || []).includes(c));
+}
+
 function visibleModulesFor(user) {
-  const mods = user.rol === 'admin' ? MODULES.slice() : MODULES.filter((m) => (user.permisos || []).includes(m.verPermiso));
+  const mods = user.rol === 'admin' ? MODULES.slice() : MODULES.filter((m) => tienePermisoModulo(user, m.verPermiso));
   if (user.rol === 'admin') {
     mods.push({ key: 'usuarios', label: 'Usuarios', render: renderUsuarios });
     mods.push({ key: 'permisos-roles', label: 'Permisos por Rol', render: renderPermisosRoles });

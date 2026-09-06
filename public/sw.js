@@ -3,11 +3,12 @@
    abra rápido, pero NUNCA cachea /api/* — los datos siempre tienen que venir
    en vivo del servidor, si no la app deja de estar sincronizada. */
 
-const CACHE = 'visagista-shell-v4';
+const CACHE = 'visagista-shell-v5';
 const SHELL = [
   '/', '/style.css', '/logo.png',
   '/api.js', '/scanner.js', '/realtime.js', '/login.js',
   '/calendario.js', '/clientes.js', '/catalogo.js', '/stock.js', '/comandas.js',
+  '/mis-turnos.js', '/comisiones.js',
   '/facturacion.js', '/egresos.js', '/dashboard.js', '/reportes.js',
   '/marketing.js', '/usuarios.js', '/permisos-roles.js', '/app.js'
 ];
